@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import {Component, inject, OnInit, signal} from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -7,8 +7,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatButtonModule } from '@angular/material/button';
-import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
+import {MatPaginator} from '@angular/material/paginator';
+import {MatSnackBar, MatSnackBarModule} from '@angular/material/snack-bar';
 
 import { FleetService } from '../../../core/services/fleet.service';
 import { AlertService } from '../../../core/services/alert.service';
@@ -18,6 +18,8 @@ import { Fleet } from '../../../shared/models/fleet.models';
 import { Alert } from '../../../shared/models/alert.models';
 import {AlertContextService} from '../../../core/services/alert-context.service';
 import {NotificationService} from '../../../core/services/notification.service';
+import {MatIcon} from '@angular/material/icon';
+import {MatTooltip} from '@angular/material/tooltip';
 
 @Component({
   selector: 'app-alerts',
@@ -32,12 +34,15 @@ import {NotificationService} from '../../../core/services/notification.service';
     MatFormFieldModule,
     MatButtonModule,
     MatPaginator,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatIcon,
+    MatTooltip
   ],
   templateUrl: './alerts.component.html',
   styleUrl: './alerts.component.css'
 })
 export class AlertsComponent implements OnInit {
+  private readonly snackBar = inject(MatSnackBar);
   loading = signal(false);
   errorMessage = signal<string | null>(null);
 
@@ -163,6 +168,31 @@ export class AlertsComponent implements OnInit {
       error: err => {
         // this.errorMessage.set('Unable to resolve alert.');
         this.notificationService.error(err?.error?.message ?? 'Unable to generate alert.');
+      }
+    });
+  }
+
+  confirmDelete(alert: Alert): void {
+    if (confirm(`Delete alert "${alert.type}"?`)) {
+      this.deleteAlert(alert.id);
+    }
+  }
+
+  deleteAlert(alertId: string): void {
+    this.alertService.deleteAlert(alertId).subscribe({
+      next: () => {
+        this.alerts.update(alerts =>
+          alerts.filter(alert => alert.id !== alertId)
+        );
+
+        this.snackBar.open('Alert deleted', 'Close', {
+          duration: 3000
+        });
+      },
+      error: () => {
+        this.snackBar.open('Unable to delete alert', 'Close', {
+          duration: 3000
+        });
       }
     });
   }
