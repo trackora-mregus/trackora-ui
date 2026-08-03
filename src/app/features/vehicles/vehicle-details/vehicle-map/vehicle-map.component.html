@@ -1,0 +1,117 @@
+<section class="vehicle-map-section">
+  <header class="map-header">
+    <div>
+      <span class="eyebrow">Vehicle location history</span>
+
+      <h2>{{ vehicleName() }}</h2>
+
+      @if (licensePlate()) {
+        <p>{{ licensePlate() }}</p>
+      }
+    </div>
+
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="refresh()"
+      [disabled]="loading()"
+    >
+      <mat-icon>refresh</mat-icon>
+      Refresh
+    </button>
+  </header>
+
+  <div class="range-controls">
+    <button
+      mat-stroked-button
+      type="button"
+      [class.active]="selectedRange() === 'TODAY'"
+      (click)="loadRange('TODAY')"
+    >
+      Today
+    </button>
+
+    <button
+      mat-stroked-button
+      type="button"
+      [class.active]="selectedRange() === '7_DAYS'"
+      (click)="loadRange('7_DAYS')"
+    >
+      Last 7 Days
+    </button>
+
+    <button
+      mat-stroked-button
+      type="button"
+      [class.active]="selectedRange() === '30_DAYS'"
+      (click)="loadRange('30_DAYS')"
+    >
+      Last 30 Days
+    </button>
+  </div>
+
+  @if (errorMessage()) {
+    <mat-card class="error-card">
+      <mat-icon>error_outline</mat-icon>
+      {{ errorMessage() }}
+    </mat-card>
+  }
+
+  <div class="map-shell">
+    <div #mapContainer class="map-container"></div>
+
+    @if (loading()) {
+      <div class="map-loading">
+        <mat-spinner diameter="44"></mat-spinner>
+        <span>Loading vehicle history...</span>
+      </div>
+    }
+
+    @if (!loading() && historyPoints().length === 0 && !errorMessage()) {
+      <div class="empty-overlay">
+        <mat-icon>location_off</mat-icon>
+
+        <strong>No location history found</strong>
+
+        <span>
+          This vehicle has no telemetry points for the selected range.
+        </span>
+      </div>
+    }
+  </div>
+
+  @if (historyPoints().length > 0) {
+    <div class="map-summary">
+      <article>
+        <span>Route Points</span>
+        <strong>{{ historyPoints().length }}</strong>
+      </article>
+
+      <article>
+        <span>First Reported</span>
+        <strong>
+          {{ historyPoints()[0].recordedAt | date:'short' }}
+        </strong>
+      </article>
+
+      <article>
+        <span>Last Reported</span>
+        <strong>
+          {{
+            historyPoints()[historyPoints().length - 1].recordedAt
+              | date:'short'
+          }}
+        </strong>
+      </article>
+
+      <article>
+        <span>Latest Speed</span>
+        <strong>
+          {{
+            historyPoints()[historyPoints().length - 1].speedMph ?? 0
+          }} mph
+        </strong>
+      </article>
+    </div>
+  }
+</section>

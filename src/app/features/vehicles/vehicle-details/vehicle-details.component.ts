@@ -43,6 +43,7 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import {NotificationService} from '../../../core/services/notification.service';
 import {TelematicsDevice, TelematicsEvent} from '../../../shared/models/telematics.models';
 import {TelematicsService} from '../../../core/services/telematics.service';
+import {VehicleMapComponent} from './vehicle-map/vehicle-map.component';
 
 @Component({
   selector: 'app-vehicle-details',
@@ -61,7 +62,8 @@ import {TelematicsService} from '../../../core/services/telematics.service';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    VehicleMapComponent
   ],
   templateUrl: './vehicle-details.component.html',
   styleUrl: './vehicle-details.component.css'

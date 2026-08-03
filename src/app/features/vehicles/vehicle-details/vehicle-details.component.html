@@ -714,6 +714,16 @@
             </mat-card>
           </section>
         </mat-tab>
+
+        <mat-tab label="Map">
+          @if (vehicle()) {
+            <app-vehicle-map
+              [vehicleId]="vehicle()!.id"
+              [vehicleName]="vehicle()!.make + ' ' + vehicle()!.model"
+              [licensePlate]="vehicle()!.licensePlate"
+            />
+          }
+        </mat-tab>
       </mat-tab-group>
     </mat-card>
   }
