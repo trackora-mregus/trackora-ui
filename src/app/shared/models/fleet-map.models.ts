@@ -6,6 +6,9 @@ export interface FleetTelematicsLocation {
   latitude: number;
   longitude: number;
   speedMph: number | null;
+  engineTempF: number | null;
+  batteryVoltage: number | null;
+  odometerMiles: number | null;
   fuelLevelPercent: number | null;
   checkEngine: boolean;
   headingDegrees: number | null;
@@ -20,6 +23,9 @@ export interface LiveVehicleLocationEvent {
   latitude: number;
   longitude: number;
   speedMph: number | null;
+  engineTempF: number | null;
+  batteryVoltage: number | null;
+  odometerMiles: number | null;
   headingDegrees: number | null;
   fuelLevelPercent: number | null;
   checkEngine: boolean;

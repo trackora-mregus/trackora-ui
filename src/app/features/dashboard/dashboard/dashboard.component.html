@@ -216,73 +216,73 @@
       </mat-card>
     </section>
 
-    <mat-card class="ai-card">
-      <div class="ai-card-header">
-        <mat-card-title>Fleet AI Summary</mat-card-title>
+<!--    <mat-card class="ai-card">-->
+<!--      <div class="ai-card-header">-->
+<!--        <mat-card-title>Fleet AI Summary</mat-card-title>-->
 
-        <div class="ai-actions">
-          <button *ngIf="authService.canWrite()"
-            mat-raised-button
-            color="primary"
-            type="button"
-            (click)="generateFleetInsight()"
-            [disabled]="generatingFleetInsight()"
-          >
-            @if (generatingFleetInsight()) {
-              Generating...
-            } @else {
-              Generate New Summary
-            }
-          </button>
+<!--        <div class="ai-actions">-->
+<!--          <button *ngIf="authService.canWrite()"-->
+<!--            mat-raised-button-->
+<!--            color="primary"-->
+<!--            type="button"-->
+<!--            (click)="generateFleetInsight()"-->
+<!--            [disabled]="generatingFleetInsight()"-->
+<!--          >-->
+<!--            @if (generatingFleetInsight()) {-->
+<!--              Generating...-->
+<!--            } @else {-->
+<!--              Generate New Summary-->
+<!--            }-->
+<!--          </button>-->
 
-          <button
-            mat-stroked-button
-            color="primary"
-            type="button"
-            (click)="loadOlderFleetInsights()"
-            [disabled]="loadingOlderFleetInsights()"
-          >
-            @if (loadingOlderFleetInsights()) {
-              Loading...
-            } @else {
-              Load Older Summaries
-            }
-          </button>
-        </div>
-      </div>
+<!--          <button-->
+<!--            mat-stroked-button-->
+<!--            color="primary"-->
+<!--            type="button"-->
+<!--            (click)="loadOlderFleetInsights()"-->
+<!--            [disabled]="loadingOlderFleetInsights()"-->
+<!--          >-->
+<!--            @if (loadingOlderFleetInsights()) {-->
+<!--              Loading...-->
+<!--            } @else {-->
+<!--              Load Older Summaries-->
+<!--            }-->
+<!--          </button>-->
+<!--        </div>-->
+<!--      </div>-->
 
-      <mat-card-content>
-        <h4>Latest Summary</h4>
+<!--      <mat-card-content>-->
+<!--        <h4>Latest Summary</h4>-->
 
-        @if (latestFleetInsight()) {
-          <p>{{ latestFleetInsight() }}</p>
-        } @else {
-          <p>No fleet AI summary generated yet.</p>
-        }
+<!--        @if (latestFleetInsight()) {-->
+<!--          <p>{{ latestFleetInsight() }}</p>-->
+<!--        } @else {-->
+<!--          <p>No fleet AI summary generated yet.</p>-->
+<!--        }-->
 
-        @if (showOlderFleetInsights()) {
-          <h4>Older Summaries</h4>
+<!--        @if (showOlderFleetInsights()) {-->
+<!--          <h4>Older Summaries</h4>-->
 
-          @if (olderFleetInsights().length > 0) {
-            <div class="older-insights">
-              @for (insight of olderFleetInsights(); track insight.id) {
-                <mat-card class="older-insight-card">
-                  <mat-card-subtitle>
-                    {{ insight.createdAt | date:'medium' }}
-                  </mat-card-subtitle>
+<!--          @if (olderFleetInsights().length > 0) {-->
+<!--            <div class="older-insights">-->
+<!--              @for (insight of olderFleetInsights(); track insight.id) {-->
+<!--                <mat-card class="older-insight-card">-->
+<!--                  <mat-card-subtitle>-->
+<!--                    {{ insight.createdAt | date:'medium' }}-->
+<!--                  </mat-card-subtitle>-->
 
-                  <mat-card-content>
-                    <p>{{ insight.summary }}</p>
-                  </mat-card-content>
-                </mat-card>
-              }
-            </div>
-          } @else {
-            <p>No older fleet summaries found.</p>
-          }
-        }
-      </mat-card-content>
-    </mat-card>
+<!--                  <mat-card-content>-->
+<!--                    <p>{{ insight.summary }}</p>-->
+<!--                  </mat-card-content>-->
+<!--                </mat-card>-->
+<!--              }-->
+<!--            </div>-->
+<!--          } @else {-->
+<!--            <p>No older fleet summaries found.</p>-->
+<!--          }-->
+<!--        }-->
+<!--      </mat-card-content>-->
+<!--    </mat-card>-->
 
     <mat-card class="recommendations-card">
       <mat-card-header>

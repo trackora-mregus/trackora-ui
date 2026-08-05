@@ -389,86 +389,86 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="AI Insights">
-          <div class="tab-content">
-            <div class="tab-header-row">
-              <div>
-                <h3>AI Insights</h3>
-                <p class="subtext">
-                  Generate and review AI summaries for this vehicle.
-                </p>
-              </div>
+<!--        <mat-tab label="AI Insights">-->
+<!--          <div class="tab-content">-->
+<!--            <div class="tab-header-row">-->
+<!--              <div>-->
+<!--                <h3>AI Insights</h3>-->
+<!--                <p class="subtext">-->
+<!--                  Generate and review AI summaries for this vehicle.-->
+<!--                </p>-->
+<!--              </div>-->
 
-              <button
-                mat-raised-button
-                color="primary"
-                type="button"
-                (click)="generateAiInsight()"
-                [disabled]="generatingInsight()"
-              >
-                @if (generatingInsight()) {
-                  Generating...
-                } @else {
-                  Generate New Insight
-                }
-              </button>
-            </div>
+<!--              <button-->
+<!--                mat-raised-button-->
+<!--                color="primary"-->
+<!--                type="button"-->
+<!--                (click)="generateAiInsight()"-->
+<!--                [disabled]="generatingInsight()"-->
+<!--              >-->
+<!--                @if (generatingInsight()) {-->
+<!--                  Generating...-->
+<!--                } @else {-->
+<!--                  Generate New Insight-->
+<!--                }-->
+<!--              </button>-->
+<!--            </div>-->
 
-            <h4>Latest Insight</h4>
+<!--            <h4>Latest Insight</h4>-->
 
-            @if (latestInsight(); as insight) {
-              <mat-card class="insight-card">
-                <mat-card-subtitle>
-                  {{ insight.createdAt | date:'medium' }}
-                </mat-card-subtitle>
+<!--            @if (latestInsight(); as insight) {-->
+<!--              <mat-card class="insight-card">-->
+<!--                <mat-card-subtitle>-->
+<!--                  {{ insight.createdAt | date:'medium' }}-->
+<!--                </mat-card-subtitle>-->
 
-                <mat-card-content>
-                  <p>{{ insight.summary }}</p>
-                </mat-card-content>
-              </mat-card>
-            } @else {
-              <p>No AI insight found yet.</p>
-            }
+<!--                <mat-card-content>-->
+<!--                  <p>{{ insight.summary }}</p>-->
+<!--                </mat-card-content>-->
+<!--              </mat-card>-->
+<!--            } @else {-->
+<!--              <p>No AI insight found yet.</p>-->
+<!--            }-->
 
-            <div class="older-insights-actions">
-              <button
-                mat-stroked-button
-                color="primary"
-                type="button"
-                (click)="loadOlderInsights()"
-                [disabled]="loadingOlderInsights()"
-              >
-                @if (loadingOlderInsights()) {
-                  Loading...
-                } @else {
-                  Load Older Insights
-                }
-              </button>
-            </div>
+<!--            <div class="older-insights-actions">-->
+<!--              <button-->
+<!--                mat-stroked-button-->
+<!--                color="primary"-->
+<!--                type="button"-->
+<!--                (click)="loadOlderInsights()"-->
+<!--                [disabled]="loadingOlderInsights()"-->
+<!--              >-->
+<!--                @if (loadingOlderInsights()) {-->
+<!--                  Loading...-->
+<!--                } @else {-->
+<!--                  Load Older Insights-->
+<!--                }-->
+<!--              </button>-->
+<!--            </div>-->
 
-            @if (showOlderInsights()) {
-              <h4>Older Insights</h4>
+<!--            @if (showOlderInsights()) {-->
+<!--              <h4>Older Insights</h4>-->
 
-              @if (olderInsights().length > 0) {
-                <div class="insights-list">
-                  @for (insight of olderInsights(); track insight.id) {
-                    <mat-card class="insight-card">
-                      <mat-card-subtitle>
-                        {{ insight.createdAt | date:'medium' }}
-                      </mat-card-subtitle>
+<!--              @if (olderInsights().length > 0) {-->
+<!--                <div class="insights-list">-->
+<!--                  @for (insight of olderInsights(); track insight.id) {-->
+<!--                    <mat-card class="insight-card">-->
+<!--                      <mat-card-subtitle>-->
+<!--                        {{ insight.createdAt | date:'medium' }}-->
+<!--                      </mat-card-subtitle>-->
 
-                      <mat-card-content>
-                        <p>{{ insight.summary }}</p>
-                      </mat-card-content>
-                    </mat-card>
-                  }
-                </div>
-              } @else {
-                <p>No older insights found.</p>
-              }
-            }
-          </div>
-        </mat-tab>
+<!--                      <mat-card-content>-->
+<!--                        <p>{{ insight.summary }}</p>-->
+<!--                      </mat-card-content>-->
+<!--                    </mat-card>-->
+<!--                  }-->
+<!--                </div>-->
+<!--              } @else {-->
+<!--                <p>No older insights found.</p>-->
+<!--              }-->
+<!--            }-->
+<!--          </div>-->
+<!--        </mat-tab>-->
 
         <mat-tab label="Documents">
           <div class="tab-content">
@@ -604,10 +604,11 @@
               <mat-card-content>
                 @if (latestTelematics(); as telemetry) {
                   <div class="telematics-grid">
-                    <div class="telemetry-stat">
-                      <span>Speed</span>
-                      <strong>{{ telemetry.speedMph ?? 0 }} mph</strong>
-                    </div>
+
+<!--                    <div class="telemetry-stat">-->
+<!--                      <span>Speed</span>-->
+<!--                      <strong>{{ telemetry.speedMph ?? 0 }} mph</strong>-->
+<!--                    </div>-->
 
                     <div
                       class="telemetry-stat"
@@ -640,10 +641,10 @@
                       <strong>{{ telemetry.odometerMiles ?? 0 }} mi</strong>
                     </div>
 
-                    <div class="telemetry-stat">
-                      <span>Idle</span>
-                      <strong>{{ telemetry.idleMinutes }} min</strong>
-                    </div>
+<!--                    <div class="telemetry-stat">-->
+<!--                      <span>Idle</span>-->
+<!--                      <strong>{{ telemetry.idleMinutes }} min</strong>-->
+<!--                    </div>-->
 
                     <div
                       class="telemetry-stat"
@@ -719,6 +720,7 @@
           @if (vehicle()) {
             <app-vehicle-map
               [vehicleId]="vehicle()!.id"
+              [fleetId]="vehicle()!.fleetId"
               [vehicleName]="vehicle()!.make + ' ' + vehicle()!.model"
               [licensePlate]="vehicle()!.licensePlate"
             />

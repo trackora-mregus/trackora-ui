@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import {TelematicsDevice, TelematicsEvent} from '../../shared/models/telematics.models';
 import {FleetTelematicsLocation, PageResponse, VehicleTrip} from '../../shared/models/fleet-map.models';
 import { TelematicsHistoryPoint } from '../../shared/models/fleet-map.models';
+import {Observable} from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -68,6 +69,14 @@ export class TelematicsService {
           size
         }
       }
+    );
+  }
+
+  getCurrentVehicleState(
+    vehicleId: string
+  ): Observable<TelematicsEvent> {
+    return this.http.get<TelematicsEvent>(
+      `${environment.apiBaseUrl}/vehicles/${vehicleId}/telematics/current`
     );
   }
 }

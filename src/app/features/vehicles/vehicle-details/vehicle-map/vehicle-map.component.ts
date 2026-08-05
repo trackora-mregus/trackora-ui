@@ -18,7 +18,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import * as L from 'leaflet';
 
 import { TelematicsService } from '../../../../core/services/telematics.service';
-import {TelematicsHistoryPoint} from '../../../../shared/models/fleet-map.models';
+import {LiveVehicleLocationEvent, TelematicsHistoryPoint} from '../../../../shared/models/fleet-map.models';
+import { FleetLiveLocationService } from '../../../../core/services/fleet-live-location.service';
 
 type ValidTelematicsHistoryPoint =
   TelematicsHistoryPoint & {
@@ -41,6 +42,9 @@ type ValidTelematicsHistoryPoint =
 })
 export class VehicleMapComponent implements AfterViewInit {
 
+  private readonly fleetLiveLocationService = inject(FleetLiveLocationService);
+
+  readonly fleetId = input.required<string>();
   readonly vehicleId = input.required<string>();
   readonly vehicleName = input<string>('Vehicle');
   readonly licensePlate = input<string>('');
@@ -59,10 +63,17 @@ export class VehicleMapComponent implements AfterViewInit {
   private map?: L.Map;
   private routeLayer?: L.Polyline;
   private markerLayer = L.layerGroup();
+  private liveMarker?: L.Marker;
 
   ngAfterViewInit(): void {
     this.initializeMap();
     this.loadRange('TODAY');
+
+    this.fleetLiveLocationService.connectToFleet(
+      this.fleetId()
+    );
+
+    this.subscribeToLiveLocation();
   }
 
   loadRange(range: 'TODAY' | '7_DAYS' | '30_DAYS'): void {
@@ -228,5 +239,53 @@ export class VehicleMapComponent implements AfterViewInit {
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  private updateLiveMarker(
+    location: LiveVehicleLocationEvent
+  ): void {
+    if (
+      !this.map ||
+      location.latitude == null ||
+      location.longitude == null
+    ) {
+      return;
+    }
+
+    const latLng: L.LatLngExpression = [
+      location.latitude,
+      location.longitude
+    ];
+
+    const popup = `
+    <strong>${this.escapeHtml(this.vehicleName())}</strong><br>
+    ${this.escapeHtml(this.licensePlate())}<br>
+    Speed: ${location.speedMph ?? 0} mph<br>
+    Last reported:
+    ${new Date(location.recordedAt).toLocaleString()}
+  `;
+
+    if (!this.liveMarker) {
+      this.liveMarker = L.marker(latLng)
+        .addTo(this.map)
+        .bindPopup(popup);
+
+      return;
+    }
+
+    this.liveMarker.setLatLng(latLng);
+    this.liveMarker.setPopupContent(popup);
+  }
+
+  private subscribeToLiveLocation(): void {
+    this.fleetLiveLocationService.locationUpdates$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(location => {
+        if (location.vehicleId !== this.vehicleId()) {
+          return;
+        }
+
+        this.updateLiveMarker(location);
+      });
   }
 }

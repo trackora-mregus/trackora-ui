@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Client, IMessage } from '@stomp/stompjs';
-import { Observable } from 'rxjs';
+import {Observable, Subject} from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { LiveVehicleLocationEvent } from '../../shared/models/fleet-map.models';
@@ -9,6 +9,13 @@ import { LiveVehicleLocationEvent } from '../../shared/models/fleet-map.models';
   providedIn: 'root'
 })
 export class FleetLiveLocationService {
+
+  private readonly locationSubject =
+    new Subject<LiveVehicleLocationEvent>();
+
+  readonly locationUpdates$ =
+    this.locationSubject.asObservable();
+
   private client?: Client;
 
   connectToFleet(fleetId: string): Observable<LiveVehicleLocationEvent> {

@@ -7,10 +7,10 @@ export interface TelematicsEvent {
   longitude: number | null;
 
   speedMph: number | null;
-  odometerMiles: number | null;
   fuelLevelPercent: number | null;
   engineTempF: number | null;
   batteryVoltage: number | null;
+  odometerMiles: number | null;
 
   checkEngine: boolean;
   harshBraking: boolean;

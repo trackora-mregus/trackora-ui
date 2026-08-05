@@ -192,9 +192,15 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadLatestTelematics(vehicleId: string): void {
-    this.telematicsService.getLatestForVehicle(vehicleId).subscribe({
-      next: data => this.latestTelematics.set(data),
-      error: () => this.latestTelematics.set(null)
+    this.telematicsService.getCurrentVehicleState(vehicleId).subscribe({
+      next: data => {
+        // console.log('Latest vehicle telematics:', data);
+        this.latestTelematics.set(data)
+      },
+      error: err => {
+        // console.error('Latest telematics failed:', err);
+        this.latestTelematics.set(null)
+      }
     });
   }
 
