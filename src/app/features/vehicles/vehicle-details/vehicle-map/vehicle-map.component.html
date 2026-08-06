@@ -22,32 +22,81 @@
   </header>
 
   <div class="range-controls">
-    <button
-      mat-stroked-button
-      type="button"
-      [class.active]="selectedRange() === 'TODAY'"
-      (click)="loadRange('TODAY')"
-    >
-      Today
-    </button>
+    <div class="map-mode-controls">
+      <button
+        mat-stroked-button
+        type="button"
+        [class.active]="mapMode() === 'LIVE'"
+        (click)="showLiveMode()"
+      >
+        <mat-icon>my_location</mat-icon>
+        Live
+      </button>
 
-    <button
-      mat-stroked-button
-      type="button"
-      [class.active]="selectedRange() === '7_DAYS'"
-      (click)="loadRange('7_DAYS')"
-    >
-      Last 7 Days
-    </button>
+      <button
+        mat-stroked-button
+        type="button"
+        [class.active]="mapMode() === 'HISTORY'"
+        (click)="showHistoryMode()"
+      >
+        <mat-icon>history</mat-icon>
+        History
+      </button>
+    </div>
 
-    <button
-      mat-stroked-button
-      type="button"
-      [class.active]="selectedRange() === '30_DAYS'"
-      (click)="loadRange('30_DAYS')"
-    >
-      Last 30 Days
-    </button>
+    @if (mapMode() === 'HISTORY') {
+      <div class="range-controls">
+        <div class="map-controls">
+          <div class="map-mode-controls">
+
+            @if (mapMode() === 'LIVE') {
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="toggleAutoFollow()"
+              >
+                <mat-icon>
+                  {{ autoFollow() ? 'my_location' : 'location_disabled' }}
+                </mat-icon>
+
+                {{ autoFollow() ? 'Following Vehicle' : 'Follow Vehicle' }}
+              </button>
+            }
+          </div>
+
+          @if (mapMode() === 'HISTORY') {
+            <div class="range-controls">
+              <button
+                mat-stroked-button
+                type="button"
+                [class.active]="selectedRange() === 'TODAY'"
+                (click)="loadRange('TODAY')"
+              >
+                Today
+              </button>
+
+              <button
+                mat-stroked-button
+                type="button"
+                [class.active]="selectedRange() === '7_DAYS'"
+                (click)="loadRange('7_DAYS')"
+              >
+                Last 7 Days
+              </button>
+
+              <button
+                mat-stroked-button
+                type="button"
+                [class.active]="selectedRange() === '30_DAYS'"
+                (click)="loadRange('30_DAYS')"
+              >
+                Last 30 Days
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
 
     <button
       mat-stroked-button
@@ -75,57 +124,30 @@
     @if (loading()) {
       <div class="map-loading">
         <mat-spinner diameter="44"></mat-spinner>
-        <span>Loading vehicle history...</span>
+
+        <span>
+        Loading vehicle location...
+      </span>
       </div>
     }
 
-    @if (!loading() && historyPoints().length === 0 && !errorMessage()) {
+    @if (
+      mapMode() === 'LIVE' &&
+      !loading() &&
+      !currentState() &&
+      !errorMessage()
+      ) {
       <div class="empty-overlay">
         <mat-icon>location_off</mat-icon>
 
-        <strong>No location history found</strong>
+        <strong>No current location found</strong>
 
         <span>
-          This vehicle has no telemetry points for the selected range.
-        </span>
+        This vehicle has not reported a valid location.
+      </span>
       </div>
     }
   </div>
-
-  @if (historyPoints().length > 0) {
-    <div class="map-summary">
-      <article>
-        <span>Route Points</span>
-        <strong>{{ historyPoints().length }}</strong>
-      </article>
-
-      <article>
-        <span>First Reported</span>
-        <strong>
-          {{ historyPoints()[0].recordedAt | date:'short' }}
-        </strong>
-      </article>
-
-      <article>
-        <span>Last Reported</span>
-        <strong>
-          {{
-            historyPoints()[historyPoints().length - 1].recordedAt
-              | date:'short'
-          }}
-        </strong>
-      </article>
-
-      <article>
-        <span>Latest Speed</span>
-        <strong>
-          {{
-            historyPoints()[historyPoints().length - 1].speedMph ?? 0
-          }} mph
-        </strong>
-      </article>
-    </div>
-  }
 
   @if (currentState(); as state) {
     <section class="live-state-panel">
@@ -211,5 +233,169 @@
         </article>
       </div>
     </section>
+  }
+  @if (mapMode() === 'HISTORY') {
+    <section class="trips-panel">
+      <header class="trips-header">
+        <div>
+          <span class="eyebrow">Detected trips</span>
+          <h3>Trip History</h3>
+        </div>
+
+        @if (tripsLoading()) {
+          <mat-spinner diameter="28"></mat-spinner>
+        }
+      </header>
+
+      @if (!tripsLoading() && trips().length === 0) {
+        <div class="trip-empty">
+          No trips found for the selected period.
+        </div>
+      }
+
+      @for (trip of trips(); track trip.startTime) {
+        <button
+          type="button"
+          class="trip-row"
+          [class.selected]="selectedTrip() === trip"
+          (click)="showTrip(trip)"
+        >
+          <div>
+            <strong>
+              {{ trip.startTime | date:'short' }}
+            </strong>
+
+            <span>
+            to {{ trip.endTime | date:'shortTime' }}
+          </span>
+          </div>
+
+          <div class="trip-stats">
+            <span>{{ trip.distanceMiles | number:'1.1-1' }} mi</span>
+            <span>{{ formatDuration(trip.durationMinutes) }}</span>
+            <span>{{ trip.maxSpeedMph | number:'1.0-1' }} mph max</span>
+          </div>
+        </button>
+      }
+
+      @if (selectedTrip()) {
+        <div class="playback-controls">
+          <button
+            mat-icon-button
+            type="button"
+            matTooltip="Restart"
+            (click)="restartTripPlayback()"
+          >
+            <mat-icon>replay</mat-icon>
+          </button>
+
+          @if (!playbackRunning()) {
+            <button
+              mat-flat-button
+              color="primary"
+              type="button"
+              (click)="playTrip()"
+            >
+              <mat-icon>play_arrow</mat-icon>
+              Play
+            </button>
+          } @else {
+            <button
+              mat-stroked-button
+              type="button"
+              (click)="pauseTripPlayback()"
+            >
+              <mat-icon>pause</mat-icon>
+              Pause
+            </button>
+          }
+
+          <button
+            mat-button
+            type="button"
+            [class.active]="playbackSpeed() === 1"
+            (click)="setPlaybackSpeed(1)"
+          >
+            1x
+          </button>
+
+          <button
+            mat-button
+            type="button"
+            [class.active]="playbackSpeed() === 2"
+            (click)="setPlaybackSpeed(2)"
+          >
+            2x
+          </button>
+
+          <button
+            mat-button
+            type="button"
+            [class.active]="playbackSpeed() === 4"
+            (click)="setPlaybackSpeed(4)"
+          >
+            4x
+          </button>
+        </div>
+      }
+
+      @if (tripTotalPages() > 1) {
+        <div class="trip-pagination">
+          <button
+            mat-button
+            type="button"
+            [disabled]="tripPage() === 0"
+            (click)="previousTripsPage()"
+          >
+            Previous
+          </button>
+
+          <span>
+          Page {{ tripPage() + 1 }} of {{ tripTotalPages() }}
+        </span>
+
+          <button
+            mat-button
+            type="button"
+            [disabled]="tripPage() >= tripTotalPages() - 1"
+            (click)="nextTripsPage()"
+          >
+            Next
+          </button>
+        </div>
+      }
+    </section>
+  }
+
+  @if (mapMode() === 'HISTORY' && selectedTrip(); as trip) {
+    <div class="trip-summary">
+      <article>
+        <span>Distance</span>
+        <strong>
+          {{ trip.distanceMiles | number:'1.1-1' }} mi
+        </strong>
+      </article>
+
+      <article>
+        <span>Duration</span>
+        <strong>
+          {{ formatDuration(trip.durationMinutes) }}
+        </strong>
+      </article>
+
+      <article>
+        <span>Average Speed</span>
+        <strong>
+          {{ trip.avgSpeedMph | number:'1.0-1' }} mph
+        </strong>
+      </article>
+
+      <article>
+        <span>Maximum Speed</span>
+        <strong>
+          {{ trip.maxSpeedMph | number:'1.0-1' }} mph
+        </strong>
+      </article>
+    </div>
   }
 </section>

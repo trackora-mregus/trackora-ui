@@ -50,16 +50,16 @@
 
 .map-shell {
   position: relative;
+  width: 100%;
+  height: 540px;
   min-height: 540px;
   overflow: hidden;
-  border: 1px solid #dbe3ec;
   border-radius: 1.25rem;
-  background: #e2e8f0;
 }
 
 .map-container {
   width: 100%;
-  height: 540px;
+  height: 100%;
 }
 
 .map-loading,
@@ -255,4 +255,61 @@
   .telemetry-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.map-mode-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.map-mode-controls button.active,
+.range-controls button.active {
+  color: #ffffff;
+  border-color: #0f766e;
+  background: #0f766e;
+}
+
+.trip-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.trip-summary article {
+  padding: 1rem;
+  border: 1px solid #dbe3ec;
+  border-radius: 0.9rem;
+  background: #ffffff;
+}
+
+.trip-summary span,
+.trip-summary strong {
+  display: block;
+}
+
+.trip-summary span {
+  margin-bottom: 0.35rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.trip-summary strong {
+  color: #1e293b;
+}
+
+@media (max-width: 800px) {
+  .trip-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }

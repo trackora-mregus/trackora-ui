@@ -4,7 +4,7 @@ import {
   DestroyRef,
   ElementRef,
   inject,
-  input,
+  input, OnDestroy,
   signal,
   viewChild
 } from '@angular/core';
@@ -18,8 +18,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import * as L from 'leaflet';
 
 import { TelematicsService } from '../../../../core/services/telematics.service';
-import { LiveVehicleLocationEvent, TelematicsHistoryPoint, FleetTelematicsLocation } from '../../../../shared/models/fleet-map.models';
+import {
+  LiveVehicleLocationEvent,
+  TelematicsHistoryPoint,
+  FleetTelematicsLocation,
+  VehicleTrip
+} from '../../../../shared/models/fleet-map.models';
 import { FleetLiveLocationService } from '../../../../core/services/fleet-live-location.service';
+import {MatTooltip} from '@angular/material/tooltip';
 
 type ValidTelematicsHistoryPoint =
   TelematicsHistoryPoint & {
@@ -36,12 +42,32 @@ type ValidTelematicsHistoryPoint =
     MatCardModule,
     MatIconModule,
     MatProgressSpinnerModule,
-    DecimalPipe
+    DecimalPipe,
+    MatTooltip
   ],
   templateUrl: './vehicle-map.component.html',
   styleUrl: './vehicle-map.component.css'
 })
-export class VehicleMapComponent implements AfterViewInit {
+export class VehicleMapComponent implements AfterViewInit, OnDestroy {
+
+  readonly mapMode = signal<'LIVE' | 'HISTORY'>('LIVE');
+  readonly trips = signal<VehicleTrip[]>([]);
+  readonly selectedTrip = signal<VehicleTrip | null>(null);
+  readonly tripsLoading = signal(false);
+
+  readonly tripPage = signal(0);
+  readonly tripTotalPages = signal(0);
+
+  readonly playbackRunning = signal(false);
+  readonly playbackSpeed = signal(1);
+
+  private resizeObserver?: ResizeObserver;
+  private readonly tripLayer = L.layerGroup();
+
+  private playbackMarker?: L.Marker;
+  private playbackTimer?: ReturnType<typeof setInterval>;
+  private playbackPoints: TelematicsHistoryPoint[] = [];
+  private playbackIndex = 0;
 
   private readonly fleetLiveLocationService = inject(FleetLiveLocationService);
 
@@ -65,19 +91,92 @@ export class VehicleMapComponent implements AfterViewInit {
   readonly autoFollow = signal(true);
 
   private map?: L.Map;
-  private routeLayer?: L.Polyline;
+  // private routeLayer?: L.Polyline;
   private markerLayer = L.layerGroup();
   private liveMarker?: L.Marker;
+  private readonly liveVehicleLayer = L.layerGroup();
 
   ngAfterViewInit(): void {
     this.initializeMap();
+    this.observeMapSize();
+
     this.loadCurrentState();
     this.loadRange('TODAY');
     this.subscribeToLiveUpdates();
+
+    setTimeout(() => {
+      this.map?.invalidateSize(true);
+    }, 300);
   }
 
-  loadRange(range: 'TODAY' | '7_DAYS' | '30_DAYS'): void {
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
+
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer);
+    }
+
+    this.map?.remove();
+  }
+
+  private refreshMapSize(): void {
+    setTimeout(() => {
+      this.map?.invalidateSize(true);
+    }, 100);
+  }
+
+  showLiveMode(): void {
+    this.mapMode.set('LIVE');
+
+    this.stopTripPlayback(true);
+    this.selectedTrip.set(null);
+    this.tripLayer.clearLayers();
+
+    const state = this.currentState();
+
+    setTimeout(() => {
+      this.map?.invalidateSize(true);
+
+      if (
+        state?.latitude != null &&
+        state.longitude != null
+      ) {
+        this.renderCurrentMarker(state);
+      }
+    }, 100);
+  }
+
+  showHistoryMode(): void {
+    this.mapMode.set('HISTORY');
+    this.stopTripPlayback(true);
+    this.tripLayer.clearLayers();
+    this.tripPage.set(0);
+    this.reloadTrips();
+
+    this.refreshMapSize();
+  }
+
+  formatDuration(minutes: number): string {
+
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    if (hours === 0) {
+      return `${mins} min`;
+    }
+
+    return `${hours}h ${mins}m`;
+  }
+
+  loadRange(
+    range: 'TODAY' | '7_DAYS' | '30_DAYS'
+  ): void {
     this.selectedRange.set(range);
+    this.tripPage.set(0);
+    this.selectedTrip.set(null);
+
+    this.stopTripPlayback(true);
+    this.tripLayer.clearLayers();
 
     const end = new Date();
     const start = new Date();
@@ -96,7 +195,7 @@ export class VehicleMapComponent implements AfterViewInit {
         break;
     }
 
-    this.loadHistory(start, end);
+    this.loadTrips(start, end);
   }
 
   refresh(): void {
@@ -129,8 +228,7 @@ export class VehicleMapComponent implements AfterViewInit {
   private initializeMap(): void {
     this.map = L.map(this.mapContainer().nativeElement, {
       center: [29.1311, -82.1941],
-      zoom: 13,
-      zoomControl: true
+      zoom: 13
     });
 
     L.tileLayer(
@@ -141,118 +239,8 @@ export class VehicleMapComponent implements AfterViewInit {
       }
     ).addTo(this.map);
 
-    this.markerLayer.addTo(this.map);
-
-    setTimeout(() => {
-      this.map?.invalidateSize();
-    });
-  }
-
-  private loadHistory(start: Date, end: Date): void {
-    this.loading.set(true);
-    this.errorMessage.set(null);
-
-    this.telematicsService
-      .getVehicleHistory(
-        this.vehicleId(),
-        start.toISOString(),
-        end.toISOString()
-      )
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-          next: points => {
-            const validPoints = points.filter(
-              (point): point is ValidTelematicsHistoryPoint =>
-                point.latitude !== null &&
-                point.longitude !== null
-            );
-
-            this.historyPoints.set(validPoints);
-            this.renderRoute(validPoints);
-            this.loading.set(false);
-          },
-        error: error => {
-          console.error('Unable to load vehicle history', error);
-
-          this.historyPoints.set([]);
-          this.clearMapLayers();
-          this.errorMessage.set(
-            'Unable to load location history for this vehicle.'
-          );
-          this.loading.set(false);
-        }
-      });
-  }
-
-  private renderRoute(points: ValidTelematicsHistoryPoint[]): void {
-    this.clearMapLayers();
-
-    if (!this.map || points.length === 0) {
-      return;
-    }
-
-    const coordinates: L.LatLngExpression[] =
-      points.map(point => [
-        point.latitude,
-        point.longitude
-      ]);
-
-    this.routeLayer = L.polyline(coordinates, {
-      color: '#2563eb',
-      weight: 5,
-      opacity: 0.85
-    }).addTo(this.map);
-
-    const first = points[0];
-    const last = points[points.length - 1];
-
-    this.addEndpointMarker(first, 'Start', '#16a34a');
-    this.addEndpointMarker(last, 'Latest', '#dc2626');
-
-    this.map.fitBounds(this.routeLayer.getBounds(), {
-      padding: [35, 35],
-      maxZoom: 16
-    });
-
-    setTimeout(() => {
-      this.map?.invalidateSize();
-    });
-  }
-
-  private addEndpointMarker(
-    point: ValidTelematicsHistoryPoint,
-    label: string,
-    color: string
-  ): void {
-    const marker = L.circleMarker(
-      [point.latitude, point.longitude],
-      {
-        radius: 8,
-        color,
-        fillColor: color,
-        fillOpacity: 1,
-        weight: 3
-      }
-    );
-
-    marker.bindPopup(`
-      <strong>${label}</strong><br>
-      ${this.escapeHtml(this.vehicleName())}<br>
-      ${this.escapeHtml(this.licensePlate())}<br>
-      Speed: ${point.speedMph ?? 0} mph<br>
-      Time: ${new Date(point.recordedAt).toLocaleString()}
-    `);
-
-    marker.addTo(this.markerLayer);
-  }
-
-  private clearMapLayers(): void {
-    if (this.map && this.routeLayer) {
-      this.map.removeLayer(this.routeLayer);
-      this.routeLayer = undefined;
-    }
-
-    this.markerLayer.clearLayers();
+    this.liveVehicleLayer.addTo(this.map);
+    this.tripLayer.addTo(this.map);
   }
 
   private escapeHtml(value: string): string {
@@ -262,42 +250,6 @@ export class VehicleMapComponent implements AfterViewInit {
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
-  }
-
-  private updateLiveMarker(
-    location: LiveVehicleLocationEvent
-  ): void {
-    if (
-      !this.map ||
-      location.latitude == null ||
-      location.longitude == null
-    ) {
-      return;
-    }
-
-    const latLng: L.LatLngExpression = [
-      location.latitude,
-      location.longitude
-    ];
-
-    const popup = `
-    <strong>${this.escapeHtml(this.vehicleName())}</strong><br>
-    ${this.escapeHtml(this.licensePlate())}<br>
-    Speed: ${location.speedMph ?? 0} mph<br>
-    Last reported:
-    ${new Date(location.recordedAt).toLocaleString()}
-  `;
-
-    if (!this.liveMarker) {
-      this.liveMarker = L.marker(latLng)
-        .addTo(this.map)
-        .bindPopup(popup);
-
-      return;
-    }
-
-    this.liveMarker.setLatLng(latLng);
-    this.liveMarker.setPopupContent(popup);
   }
 
   private subscribeToLiveUpdates(): void {
@@ -364,7 +316,10 @@ export class VehicleMapComponent implements AfterViewInit {
       popupContent
     );
 
-    if (this.autoFollow()) {
+    if (
+      this.mapMode() === 'LIVE' &&
+      this.autoFollow()
+    ) {
       this.map.panTo(position, {
         animate: true,
         duration: 0.6
@@ -406,15 +361,18 @@ export class VehicleMapComponent implements AfterViewInit {
       state.longitude
     ];
 
-    const popup = this.buildVehiclePopup(state);
+    const icon = this.createVehicleIcon(state);
 
     if (!this.liveMarker) {
-      this.liveMarker = L.marker(position)
-        .addTo(this.map)
-        .bindPopup(popup);
+      this.liveMarker = L.marker(position, { icon })
+        .addTo(this.liveVehicleLayer)
+        .bindPopup(this.buildVehiclePopup(state));
     } else {
       this.liveMarker.setLatLng(position);
-      this.liveMarker.setPopupContent(popup);
+      this.liveMarker.setIcon(icon);
+      this.liveMarker.setPopupContent(
+        this.buildVehiclePopup(state)
+      );
     }
 
     this.map.setView(position, 15);
@@ -447,5 +405,302 @@ export class VehicleMapComponent implements AfterViewInit {
     Last reported:
     ${new Date(state.recordedAt).toLocaleString()}
   `;
+  }
+
+  private loadTrips(start: Date, end: Date): void {
+    this.tripsLoading.set(true);
+
+    this.telematicsService
+      .getVehicleTrips(
+        this.vehicleId(),
+        start.toISOString(),
+        end.toISOString(),
+        5,
+        this.tripPage(),
+        10
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: response => {
+          this.trips.set(response.content ?? []);
+          this.tripPage.set(response.page ?? 0);
+          this.tripTotalPages.set(response.totalPages ?? 0);
+          this.tripsLoading.set(false);
+        },
+        error: error => {
+          console.error('Unable to load vehicle trips', error);
+          this.trips.set([]);
+          this.tripsLoading.set(false);
+        }
+      });
+  }
+
+  private reloadTrips(): void {
+    const end = new Date();
+    const start = new Date();
+
+    switch (this.selectedRange()) {
+      case 'TODAY':
+        start.setHours(0, 0, 0, 0);
+        break;
+
+      case '7_DAYS':
+        start.setDate(end.getDate() - 7);
+        break;
+
+      case '30_DAYS':
+        start.setDate(end.getDate() - 30);
+        break;
+    }
+
+    this.loadTrips(start, end);
+  }
+
+  showTrip(trip: VehicleTrip): void {
+    this.stopTripPlayback();
+    this.selectedTrip.set(trip);
+    this.tripLayer.clearLayers();
+
+    this.telematicsService
+      .getVehicleHistory(
+        this.vehicleId(),
+        trip.startTime,
+        trip.endTime
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: points => {
+          const validPoints = points.filter(
+            point =>
+              point.latitude !== null &&
+              point.longitude !== null
+          );
+
+          this.playbackPoints = validPoints;
+          this.playbackIndex = 0;
+
+          if (validPoints.length === 0 || !this.map) {
+            return;
+          }
+
+          const coordinates: L.LatLngExpression[] =
+            validPoints.map(point => [
+              point.latitude!,
+              point.longitude!
+            ]);
+
+          const route = L.polyline(coordinates, {
+            color: '#2563eb',
+            weight: 5,
+            opacity: 0.85
+          }).addTo(this.tripLayer);
+
+          const first = validPoints[0];
+          const last = validPoints[validPoints.length - 1];
+
+          L.circleMarker(
+            [first.latitude!, first.longitude!],
+            {
+              radius: 8,
+              color: '#16a34a',
+              fillColor: '#16a34a',
+              fillOpacity: 1
+            }
+          )
+            .bindPopup('Trip start')
+            .addTo(this.tripLayer);
+
+          L.circleMarker(
+            [last.latitude!, last.longitude!],
+            {
+              radius: 8,
+              color: '#dc2626',
+              fillColor: '#dc2626',
+              fillOpacity: 1
+            }
+          )
+            .bindPopup('Trip end')
+            .addTo(this.tripLayer);
+
+          this.map.fitBounds(route.getBounds(), {
+            padding: [35, 35],
+            maxZoom: 16
+          });
+        },
+        error: error => {
+          console.error('Unable to load trip history', error);
+        }
+      });
+  }
+
+  playTrip(): void {
+    if (
+      this.playbackPoints.length === 0 ||
+      this.playbackRunning()
+    ) {
+      return;
+    }
+
+    this.playbackRunning.set(true);
+
+    const intervalMs = 500 / this.playbackSpeed();
+
+    this.playbackTimer = setInterval(() => {
+      const point = this.playbackPoints[this.playbackIndex];
+
+      if (
+        !point ||
+        point.latitude === null ||
+        point.longitude === null
+      ) {
+        this.stopTripPlayback(false);
+        return;
+      }
+
+      const position: L.LatLngExpression = [
+        point.latitude,
+        point.longitude
+      ];
+
+      if (!this.playbackMarker) {
+        this.playbackMarker = L.marker(position, {
+          icon: L.divIcon({
+            className: 'playback-marker',
+            html: `
+            <span
+              class="material-icons playback-icon"
+              style="transform: rotate(${
+              this.currentState()?.headingDegrees ?? 0
+            }deg)"
+            >
+              navigation
+            </span>
+          `,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          })
+        }).addTo(this.tripLayer);
+      } else {
+        this.playbackMarker.setLatLng(position);
+      }
+
+      this.playbackMarker.setPopupContent(`
+      <strong>Trip playback</strong><br>
+      Speed: ${point.speedMph ?? 0} mph<br>
+      Time: ${new Date(point.recordedAt).toLocaleString()}
+    `);
+
+      if (this.autoFollow()) {
+        this.map?.panTo(position, {
+          animate: true,
+          duration: 0.4
+        });
+      }
+
+      this.playbackIndex++;
+
+      if (this.playbackIndex >= this.playbackPoints.length) {
+        this.stopTripPlayback(false);
+      }
+    }, intervalMs);
+  }
+
+  pauseTripPlayback(): void {
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer);
+      this.playbackTimer = undefined;
+    }
+
+    this.playbackRunning.set(false);
+  }
+
+  stopTripPlayback(reset = true): void {
+    this.pauseTripPlayback();
+
+    if (reset) {
+      this.playbackIndex = 0;
+
+      if (this.playbackMarker) {
+        this.tripLayer.removeLayer(this.playbackMarker);
+        this.playbackMarker = undefined;
+      }
+    }
+  }
+
+  restartTripPlayback(): void {
+    this.stopTripPlayback(true);
+    this.playTrip();
+  }
+
+  setPlaybackSpeed(speed: number): void {
+    const wasRunning = this.playbackRunning();
+
+    this.pauseTripPlayback();
+    this.playbackSpeed.set(speed);
+
+    if (wasRunning) {
+      this.playTrip();
+    }
+  }
+
+  previousTripsPage(): void {
+    if (this.tripPage() === 0) {
+      return;
+    }
+
+    this.tripPage.update(page => page - 1);
+    this.reloadTrips();
+  }
+
+  nextTripsPage(): void {
+    if (this.tripPage() >= this.tripTotalPages() - 1) {
+      return;
+    }
+
+    this.tripPage.update(page => page + 1);
+    this.reloadTrips();
+  }
+
+  private observeMapSize(): void {
+    const element = this.mapContainer().nativeElement;
+
+    this.resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        this.map?.invalidateSize(false);
+      });
+    });
+
+    this.resizeObserver.observe(element);
+  }
+
+  private createVehicleIcon(
+    state: FleetTelematicsLocation
+  ): L.DivIcon {
+    const heading = state.headingDegrees ?? 0;
+
+    const color =
+      state.checkEngine
+        ? '#dc2626'
+        : state.status === 'OFFLINE'
+          ? '#64748b'
+          : '#2563eb';
+
+    return L.divIcon({
+      className: 'vehicle-map-marker',
+      html: `
+      <span
+        class="material-icons vehicle-map-icon"
+        style="
+          color: ${color};
+          transform: rotate(${heading}deg);
+        "
+      >
+        navigation
+      </span>
+    `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      popupAnchor: [0, -14]
+    });
   }
 }

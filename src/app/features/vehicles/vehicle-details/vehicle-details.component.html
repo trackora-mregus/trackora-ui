@@ -717,14 +717,16 @@
         </mat-tab>
 
         <mat-tab label="Map">
-          @if (vehicle()) {
-            <app-vehicle-map
-              [vehicleId]="vehicle()!.id"
-              [fleetId]="vehicle()!.fleetId"
-              [vehicleName]="vehicle()!.make + ' ' + vehicle()!.model"
-              [licensePlate]="vehicle()!.licensePlate"
-            />
-          }
+          <ng-template matTabContent>
+            @if (vehicle(); as currentVehicle) {
+              <app-vehicle-map
+                [vehicleId]="currentVehicle.id"
+                [fleetId]="currentVehicle.fleetId"
+                [vehicleName]="currentVehicle.make + ' ' + currentVehicle.model"
+                [licensePlate]="currentVehicle.licensePlate"
+              />
+            }
+          </ng-template>
         </mat-tab>
       </mat-tab-group>
     </mat-card>
