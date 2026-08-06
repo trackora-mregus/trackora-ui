@@ -74,8 +74,8 @@ export class TelematicsService {
 
   getCurrentVehicleState(
     vehicleId: string
-  ): Observable<TelematicsEvent> {
-    return this.http.get<TelematicsEvent>(
+  ): Observable<FleetTelematicsLocation> {
+    return this.http.get<FleetTelematicsLocation>(
       `${environment.apiBaseUrl}/vehicles/${vehicleId}/telematics/current`
     );
   }

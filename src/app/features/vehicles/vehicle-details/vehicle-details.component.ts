@@ -44,6 +44,7 @@ import {NotificationService} from '../../../core/services/notification.service';
 import {TelematicsDevice, TelematicsEvent} from '../../../shared/models/telematics.models';
 import {TelematicsService} from '../../../core/services/telematics.service';
 import {VehicleMapComponent} from './vehicle-map/vehicle-map.component';
+import {FleetTelematicsLocation} from '../../../shared/models/fleet-map.models';
 
 @Component({
   selector: 'app-vehicle-details',
@@ -93,7 +94,7 @@ export class VehicleDetailsComponent implements OnInit {
   maintenanceDocuments = signal<Record<string, VehicleDocument[]>>({});
   uploadingMaintenanceDocument = signal<string | null>(null);
   selectedDocumentType = signal('GENERAL');
-  latestTelematics = signal<TelematicsEvent | null>(null);
+  latestTelematics = signal<FleetTelematicsLocation | null>(null);
   device = signal<TelematicsDevice | null>(null);
 
   documentTypes = [
@@ -714,42 +715,5 @@ export class VehicleDetailsComponent implements OnInit {
 
   getDeviceStatusClass(): string {
     return this.getDeviceStatus().toLowerCase();
-  }
-
-  // remove this later (used to simulate telematics data)
-  simulateTelematicsEvent(): void {
-    const vehicleId = this.vehicle()?.id; // replace if your vehicle id variable is different
-
-    if (!vehicleId) {
-      this.notificationService.error('No vehicle selected.');
-      return;
-    }
-
-    const event = {
-      vehicleId,
-      recordedAt: new Date().toISOString(),
-      latitude: 28.5383 + (Math.random() - 0.5) / 100,
-      longitude: -81.3792 + (Math.random() - 0.5) / 100,
-      speedMph: Math.floor(35 + Math.random() * 70),
-      odometerMiles: Math.floor(110000 + Math.random() * 5000),
-      fuelLevelPercent: Math.floor(5 + Math.random() * 90),
-      engineTempF: Math.floor(185 + Math.random() * 75),
-      batteryVoltage: Number((11.2 + Math.random() * 1.8).toFixed(1)),
-      checkEngine: Math.random() > 0.8,
-      harshBraking: Math.random() > 0.75,
-      idleMinutes: Math.floor(Math.random() * 60)
-    };
-
-    this.telematicsService.createEvent(event).subscribe({
-      next: telemetry => {
-        this.latestTelematics.set(telemetry);
-        this.notificationService.success('Telematics event generated.');
-      },
-      error: err => {
-        this.notificationService.error(
-          err?.error?.message ?? 'Unable to generate telematics event.'
-        );
-      }
-    });
   }
 }

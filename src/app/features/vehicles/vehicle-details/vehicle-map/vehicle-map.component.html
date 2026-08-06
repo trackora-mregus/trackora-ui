@@ -48,6 +48,18 @@
     >
       Last 30 Days
     </button>
+
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="toggleAutoFollow()"
+    >
+      <mat-icon>
+        {{ autoFollow() ? 'my_location' : 'location_disabled' }}
+      </mat-icon>
+
+      {{ autoFollow() ? 'Following Vehicle' : 'Follow Vehicle' }}
+    </button>
   </div>
 
   @if (errorMessage()) {
@@ -113,5 +125,91 @@
         </strong>
       </article>
     </div>
+  }
+
+  @if (currentState(); as state) {
+    <section class="live-state-panel">
+      <header class="live-state-header">
+        <div>
+          <span class="eyebrow">Current vehicle state</span>
+          <h3>{{ state.label }}</h3>
+        </div>
+
+        <span
+          class="status-badge"
+          [class.online]="state.status === 'ONLINE'"
+          [class.stale]="state.status === 'STALE'"
+          [class.offline]="state.status === 'OFFLINE'"
+        >
+        {{ state.status }}
+      </span>
+      </header>
+
+      <div class="telemetry-grid">
+        <article>
+          <mat-icon>speed</mat-icon>
+          <span>Speed</span>
+          <strong>
+            {{ state.speedMph ?? 0 | number:'1.0-1' }} mph
+          </strong>
+        </article>
+
+        <article>
+          <mat-icon>local_gas_station</mat-icon>
+          <span>Fuel</span>
+          <strong>
+            @if (state.fuelLevelPercent != null) {
+              {{ state.fuelLevelPercent | number:'1.0-1' }}%
+            } @else {
+              —
+            }
+          </strong>
+        </article>
+
+        <article>
+          <mat-icon>battery_charging_full</mat-icon>
+          <span>Battery</span>
+          <strong>
+            @if (state.batteryVoltage != null) {
+              {{ state.batteryVoltage | number:'1.1-2' }} V
+            } @else {
+              —
+            }
+          </strong>
+        </article>
+
+        <article>
+          <mat-icon>device_thermostat</mat-icon>
+          <span>Engine Temperature</span>
+          <strong>
+            @if (state.engineTempF != null) {
+              {{ state.engineTempF | number:'1.0-1' }} °F
+            } @else {
+              —
+            }
+          </strong>
+        </article>
+
+        <article>
+          <mat-icon>route</mat-icon>
+          <span>Odometer</span>
+          <strong>
+            @if (state.odometerMiles != null) {
+              {{ state.odometerMiles | number:'1.0-1' }} mi
+            } @else {
+              —
+            }
+          </strong>
+        </article>
+
+        <article>
+          <mat-icon>schedule</mat-icon>
+          <span>Last Reported</span>
+          <strong>
+            {{ state.recordedAt | date:'short' }}
+          </strong>
+        </article>
+      </div>
+    </section>
   }
 </section>

@@ -8,7 +8,7 @@ import {
   signal,
   viewChild
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import {DatePipe, DecimalPipe} from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -18,7 +18,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import * as L from 'leaflet';
 
 import { TelematicsService } from '../../../../core/services/telematics.service';
-import {LiveVehicleLocationEvent, TelematicsHistoryPoint} from '../../../../shared/models/fleet-map.models';
+import { LiveVehicleLocationEvent, TelematicsHistoryPoint, FleetTelematicsLocation } from '../../../../shared/models/fleet-map.models';
 import { FleetLiveLocationService } from '../../../../core/services/fleet-live-location.service';
 
 type ValidTelematicsHistoryPoint =
@@ -35,7 +35,8 @@ type ValidTelematicsHistoryPoint =
     MatButtonModule,
     MatCardModule,
     MatIconModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    DecimalPipe
   ],
   templateUrl: './vehicle-map.component.html',
   styleUrl: './vehicle-map.component.css'
@@ -55,10 +56,13 @@ export class VehicleMapComponent implements AfterViewInit {
   private readonly mapContainer =
     viewChild.required<ElementRef<HTMLDivElement>>('mapContainer');
 
+  readonly currentState = signal<FleetTelematicsLocation | null>(null);
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly historyPoints = signal<TelematicsHistoryPoint[]>([]);
   readonly selectedRange = signal<'TODAY' | '7_DAYS' | '30_DAYS'>('TODAY');
+
+  readonly autoFollow = signal(true);
 
   private map?: L.Map;
   private routeLayer?: L.Polyline;
@@ -67,13 +71,9 @@ export class VehicleMapComponent implements AfterViewInit {
 
   ngAfterViewInit(): void {
     this.initializeMap();
+    this.loadCurrentState();
     this.loadRange('TODAY');
-
-    this.fleetLiveLocationService.connectToFleet(
-      this.fleetId()
-    );
-
-    this.subscribeToLiveLocation();
+    this.subscribeToLiveUpdates();
   }
 
   loadRange(range: 'TODAY' | '7_DAYS' | '30_DAYS'): void {
@@ -101,6 +101,29 @@ export class VehicleMapComponent implements AfterViewInit {
 
   refresh(): void {
     this.loadRange(this.selectedRange());
+  }
+
+  toggleAutoFollow(): void {
+    const enabled = !this.autoFollow();
+
+    this.autoFollow.set(enabled);
+
+    if (enabled) {
+      const state = this.currentState();
+
+      if (
+        state?.latitude != null &&
+        state.longitude != null
+      ) {
+        this.map?.panTo(
+          [state.latitude, state.longitude],
+          {
+            animate: true,
+            duration: 0.6
+          }
+        );
+      }
+    }
   }
 
   private initializeMap(): void {
@@ -277,15 +300,152 @@ export class VehicleMapComponent implements AfterViewInit {
     this.liveMarker.setPopupContent(popup);
   }
 
-  private subscribeToLiveLocation(): void {
-    this.fleetLiveLocationService.locationUpdates$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(location => {
-        if (location.vehicleId !== this.vehicleId()) {
-          return;
-        }
+  private subscribeToLiveUpdates(): void {
+    this.fleetLiveLocationService
+      .connectToFleet(this.fleetId())
+      .pipe(
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: event => {
+          if (
+            event.vehicleId !== this.vehicleId()
+          ) {
+            return;
+          }
 
-        this.updateLiveMarker(location);
+          this.updateLiveVehicle(event);
+        },
+
+        error: error => {
+          console.error(
+            'Vehicle live tracking failed',
+            error
+          );
+        }
       });
+  }
+
+  private updateLiveVehicle(
+    event: LiveVehicleLocationEvent
+  ): void {
+    if (
+      !this.map ||
+      event.latitude == null ||
+      event.longitude == null
+    ) {
+      return;
+    }
+
+    const position: L.LatLngExpression = [
+      event.latitude,
+      event.longitude
+    ];
+
+    const popupContent = `
+    <strong>${this.escapeHtml(event.vehicleName)}</strong>
+    <br>${this.escapeHtml(event.licensePlate ?? 'unknown license plate')}<br>
+    Speed: ${event.speedMph ?? 0} mph<br>
+    Fuel: ${event.fuelLevelPercent ?? '—'}%<br>
+    Last reported:
+    ${new Date(event.recordedAt).toLocaleString()}
+  `;
+
+    if (!this.liveMarker) {
+      this.liveMarker = L.marker(position)
+        .addTo(this.map)
+        .bindPopup(popupContent);
+
+      return;
+    }
+
+    this.liveMarker.setLatLng(position);
+    this.liveMarker.setPopupContent(
+      popupContent
+    );
+
+    if (this.autoFollow()) {
+      this.map.panTo(position, {
+        animate: true,
+        duration: 0.6
+      });
+    }
+  }
+
+  private loadCurrentState(): void {
+    this.telematicsService
+      .getCurrentVehicleState(this.vehicleId())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: state => {
+          this.currentState.set(state);
+          this.renderCurrentMarker(state);
+        },
+        error: error => {
+          console.error(
+            'Unable to load current vehicle state',
+            error
+          );
+        }
+      });
+  }
+
+  private renderCurrentMarker(
+    state: FleetTelematicsLocation
+  ): void {
+    if (
+      !this.map ||
+      state.latitude == null ||
+      state.longitude == null
+    ) {
+      return;
+    }
+
+    const position: L.LatLngExpression = [
+      state.latitude,
+      state.longitude
+    ];
+
+    const popup = this.buildVehiclePopup(state);
+
+    if (!this.liveMarker) {
+      this.liveMarker = L.marker(position)
+        .addTo(this.map)
+        .bindPopup(popup);
+    } else {
+      this.liveMarker.setLatLng(position);
+      this.liveMarker.setPopupContent(popup);
+    }
+
+    this.map.setView(position, 15);
+  }
+
+  private buildVehiclePopup(
+    state: FleetTelematicsLocation
+  ): string {
+    return `
+    <strong>${this.escapeHtml(state.label)}</strong><br>
+    ${this.escapeHtml(state.licensePlate)}<br>
+    Status: ${this.escapeHtml(state.status)}<br>
+    Speed: ${state.speedMph ?? 0} mph<br>
+    Fuel: ${state.fuelLevelPercent ?? '—'}%<br>
+    Battery: ${
+      state.batteryVoltage != null
+        ? `${state.batteryVoltage} V`
+        : '—'
+    }<br>
+    Engine: ${
+      state.engineTempF != null
+        ? `${state.engineTempF} °F`
+        : '—'
+    }<br>
+    Odometer: ${
+      state.odometerMiles != null
+        ? `${state.odometerMiles} mi`
+        : '—'
+    }<br>
+    Last reported:
+    ${new Date(state.recordedAt).toLocaleString()}
+  `;
   }
 }

@@ -167,3 +167,92 @@
     grid-template-columns: 1fr;
   }
 }
+
+.live-state-panel {
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #dbe3ec;
+  border-radius: 1rem;
+  background: #ffffff;
+}
+
+.live-state-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.live-state-header h3 {
+  margin: 0.25rem 0 0;
+  color: #0f172a;
+}
+
+.status-badge {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.status-badge.online {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-badge.stale {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.status-badge.offline {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.telemetry-grid article {
+  padding: 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  background: #f8fafc;
+}
+
+.telemetry-grid mat-icon {
+  color: #0f766e;
+}
+
+.telemetry-grid span,
+.telemetry-grid strong {
+  display: block;
+}
+
+.telemetry-grid span {
+  margin-top: 0.5rem;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.telemetry-grid strong {
+  margin-top: 0.25rem;
+  color: #1e293b;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1100px) {
+  .telemetry-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .telemetry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
