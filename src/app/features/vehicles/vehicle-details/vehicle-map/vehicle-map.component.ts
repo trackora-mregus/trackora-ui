@@ -142,7 +142,13 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
         state?.latitude != null &&
         state.longitude != null
       ) {
-        this.renderCurrentMarker(state);
+        this.map?.setView(
+          [
+            state.latitude,
+            state.longitude
+          ],
+          15
+        );
       }
     }, 100);
   }
@@ -381,7 +387,11 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
       .subscribe({
         next: state => {
           this.currentState.set(state);
-          this.renderCurrentMarker(state);
+
+          this.renderCurrentMarker(
+            state,
+            true
+          );
         },
         error: error => {
           console.error(
@@ -393,9 +403,9 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   }
 
   private renderCurrentMarker(
-    state: FleetTelematicsLocation
+    state: FleetTelematicsLocation,
+    centerMap = false
   ): void {
-
     if (
       !this.map ||
       state.latitude == null ||
@@ -412,26 +422,20 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
     const icon = this.createVehicleIcon(state);
 
     if (!this.liveMarker) {
-      this.liveMarker = L.marker(
-        position,
-        { icon }
-      )
+      this.liveMarker = L.marker(position, { icon })
         .addTo(this.liveVehicleLayer)
-        .bindPopup(
-          this.buildVehiclePopup(state)
-        );
-
-      return;
+        .bindPopup(this.buildVehiclePopup(state));
+    } else {
+      this.liveMarker.setLatLng(position);
+      this.liveMarker.setIcon(icon);
+      this.liveMarker.setPopupContent(
+        this.buildVehiclePopup(state)
+      );
     }
 
-    this.liveMarker.setLatLng(position);
-
-    // Important for heading changes
-    this.liveMarker.setIcon(icon);
-
-    this.liveMarker.setPopupContent(
-      this.buildVehiclePopup(state)
-    );
+    if (centerMap) {
+      this.map.setView(position, 15);
+    }
   }
 
   private buildVehiclePopup(
