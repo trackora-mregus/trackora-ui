@@ -59,6 +59,7 @@ export class FleetMapComponent implements AfterViewInit {
   private playbackTimer?: ReturnType<typeof setInterval>;
   private playbackPoints: TelematicsHistoryPoint[] = [];
   private playbackIndex = 0;
+  private playbackHeading = 0;
 
   map!: L.Map;
 
@@ -69,6 +70,7 @@ export class FleetMapComponent implements AfterViewInit {
   historyStart = signal<string>(this.toDatetimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000)));
   historyEnd = signal<string>(this.toDatetimeLocal(new Date()));
 
+  readonly tripPlaybackActive = signal(false);
   trips = signal<VehicleTrip[]>([]);
   selectedVehicleId = signal<string | null>(null);
   selectedVehicle = signal<FleetTelematicsLocation | null>(null);
@@ -215,34 +217,79 @@ export class FleetMapComponent implements AfterViewInit {
 
     this.stopTripPlayback();
 
+    this.tripPlaybackActive.set(true);
+
     this.playbackTimer = setInterval(() => {
       const point = this.playbackPoints[this.playbackIndex];
 
-      if (!point || point.latitude === null || point.longitude === null) {
+      if (
+        !point ||
+        point.latitude === null ||
+        point.longitude === null
+      ) {
         this.stopTripPlayback();
         return;
       }
 
-      const latLng: [number, number] = [point.latitude, point.longitude];
+      const nextPoint =
+        this.playbackPoints[this.playbackIndex + 1];
+
+      let heading = this.playbackHeading;
+
+      if (
+        nextPoint &&
+        nextPoint.latitude !== null &&
+        nextPoint.longitude !== null
+      ) {
+        heading = this.calculateBearing(
+          point.latitude,
+          point.longitude,
+          nextPoint.latitude,
+          nextPoint.longitude
+        );
+
+        this.playbackHeading = heading;
+      }
+
+      const latLng: [number, number] = [
+        point.latitude,
+        point.longitude
+      ];
+
+      const icon = L.divIcon({
+        className: 'playback-marker',
+        html: `
+        <span
+          class="material-icons playback-icon"
+          style="transform: rotate(${heading}deg);"
+        >
+          navigation
+        </span>
+      `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
 
       if (!this.playbackMarker) {
         this.playbackMarker = L.marker(latLng, {
-          icon: L.divIcon({
-            className: 'playback-marker',
-            html: `<span class="material-icons playback-icon">navigation</span>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-          })
+          icon
         }).addTo(this.routeLayer);
       } else {
         this.playbackMarker.setLatLng(latLng);
+        this.playbackMarker.setIcon(icon);
       }
 
-      this.playbackMarker.bindPopup(`
+      this.playbackMarker.setPopupContent(`
       <strong>Playback</strong><br/>
       Speed: ${point.speedMph ?? 0} mph<br/>
       Time: ${new Date(point.recordedAt).toLocaleString()}
     `);
+
+      // Keep map centered on replay marker
+      this.map.panTo(latLng, {
+        animate: true,
+        duration: 0.4
+      });
 
       this.playbackIndex++;
 
@@ -258,7 +305,10 @@ export class FleetMapComponent implements AfterViewInit {
       this.playbackTimer = undefined;
     }
 
+    this.tripPlaybackActive.set(false);
+
     this.playbackIndex = 0;
+    this.playbackHeading = 0;
 
     if (this.playbackMarker) {
       this.routeLayer.removeLayer(this.playbackMarker);
@@ -315,12 +365,20 @@ export class FleetMapComponent implements AfterViewInit {
         .addTo(this.markersLayer);
     });
 
-    if (locations.length > 0) {
+    if (
+      locations.length > 0 &&
+      !this.tripPlaybackActive()
+    ) {
       const bounds = L.latLngBounds(
-        locations.map(location => [location.latitude, location.longitude])
+        locations.map(location => [
+          location.latitude,
+          location.longitude
+        ])
       );
 
-      this.map.fitBounds(bounds, { padding: [40, 40] });
+      this.map.fitBounds(bounds, {
+        padding: [40, 40]
+      });
     }
   }
 
@@ -537,5 +595,36 @@ export class FleetMapComponent implements AfterViewInit {
 
   private toIsoFromDatetimeLocal(value: string): string {
     return new Date(value).toISOString();
+  }
+
+  private calculateBearing(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number {
+    const startLat = this.toRadians(lat1);
+    const startLon = this.toRadians(lon1);
+    const endLat = this.toRadians(lat2);
+    const endLon = this.toRadians(lon2);
+
+    const dLon = endLon - startLon;
+
+    const y = Math.sin(dLon) * Math.cos(endLat);
+
+    const x =
+      Math.cos(startLat) * Math.sin(endLat) -
+      Math.sin(startLat) *
+      Math.cos(endLat) *
+      Math.cos(dLon);
+
+    const bearing =
+      Math.atan2(y, x) * (180 / Math.PI);
+
+    return (bearing + 360) % 360;
+  }
+
+  private toRadians(value: number): number {
+    return value * (Math.PI / 180);
   }
 }

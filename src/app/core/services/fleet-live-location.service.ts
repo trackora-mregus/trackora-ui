@@ -16,7 +16,7 @@ import {
 })
 export class FleetLiveLocationService {
 
-  private readonly fleetStreams = new Map<
+  private readonly streams = new Map<
     string,
     Observable<LiveVehicleLocationEvent>
   >();
@@ -25,16 +25,17 @@ export class FleetLiveLocationService {
     fleetId: string
   ): Observable<LiveVehicleLocationEvent> {
 
-    const existingStream = this.fleetStreams.get(fleetId);
+    const existing = this.streams.get(fleetId);
 
-    if (existingStream) {
-      return existingStream;
+    if (existing) {
+      return existing;
     }
 
     const stream = new Observable<LiveVehicleLocationEvent>(
       observer => {
+
         const client = new Client({
-          brokerURL: this.getWebSocketUrl(),
+          brokerURL: environment.wsBaseUrl,
           reconnectDelay: 5000,
 
           debug: message => {
@@ -46,7 +47,7 @@ export class FleetLiveLocationService {
 
         client.onConnect = () => {
           console.log(
-            `WebSocket connected for fleet ${fleetId}`
+            `WebSocket connected to fleet ${fleetId}`
           );
 
           client.subscribe(
@@ -58,10 +59,16 @@ export class FleetLiveLocationService {
                     message.body
                   ) as LiveVehicleLocationEvent;
 
+                console.log(
+                  'Live vehicle event:',
+                  event
+                );
+
                 observer.next(event);
+
               } catch (error) {
                 console.error(
-                  'Unable to parse live vehicle event',
+                  'Unable to parse live location event',
                   error
                 );
               }
@@ -71,17 +78,15 @@ export class FleetLiveLocationService {
 
         client.onStompError = frame => {
           console.error(
-            'STOMP broker error',
+            'STOMP error:',
             frame.headers['message'],
             frame.body
           );
-
-          observer.error(frame);
         };
 
         client.onWebSocketError = error => {
           console.error(
-            'WebSocket connection error',
+            'WebSocket error:',
             error
           );
         };
@@ -90,10 +95,6 @@ export class FleetLiveLocationService {
 
         return () => {
           void client.deactivate();
-
-          console.log(
-            `WebSocket disconnected for fleet ${fleetId}`
-          );
         };
       }
     ).pipe(
@@ -107,12 +108,8 @@ export class FleetLiveLocationService {
       })
     );
 
-    this.fleetStreams.set(fleetId, stream);
+    this.streams.set(fleetId, stream);
 
     return stream;
-  }
-
-  private getWebSocketUrl(): string {
-    return environment.wsBaseUrl;
   }
 }

@@ -64,6 +64,7 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private readonly tripLayer = L.layerGroup();
 
+  private playbackHeading = 0;
   private playbackMarker?: L.Marker;
   private playbackTimer?: ReturnType<typeof setInterval>;
   private playbackPoints: TelematicsHistoryPoint[] = [];
@@ -260,6 +261,11 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: event => {
+          console.log(
+            'Vehicle map websocket event:',
+            event
+          );
+
           if (
             event.vehicleId !== this.vehicleId()
           ) {
@@ -271,7 +277,7 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
 
         error: error => {
           console.error(
-            'Vehicle live tracking failed',
+            'Vehicle map websocket error:',
             error
           );
         }
@@ -281,49 +287,90 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   private updateLiveVehicle(
     event: LiveVehicleLocationEvent
   ): void {
+
     if (
-      !this.map ||
       event.latitude == null ||
       event.longitude == null
     ) {
       return;
     }
 
-    const position: L.LatLngExpression = [
-      event.latitude,
-      event.longitude
-    ];
+    const previous = this.currentState();
 
-    const popupContent = `
-    <strong>${this.escapeHtml(event.vehicleName)}</strong>
-    <br>${this.escapeHtml(event.licensePlate ?? 'unknown license plate')}<br>
-    Speed: ${event.speedMph ?? 0} mph<br>
-    Fuel: ${event.fuelLevelPercent ?? '—'}%<br>
-    Last reported:
-    ${new Date(event.recordedAt).toLocaleString()}
-  `;
+    const updated: FleetTelematicsLocation = {
+      vehicleId: event.vehicleId,
+      status: 'ONLINE',
 
-    if (!this.liveMarker) {
-      this.liveMarker = L.marker(position)
-        .addTo(this.map)
-        .bindPopup(popupContent);
+      label:
+        event.vehicleName ??
+        previous?.label ??
+        this.vehicleName(),
 
-      return;
-    }
+      licensePlate:
+        event.licensePlate ??
+        previous?.licensePlate ??
+        this.licensePlate(),
 
-    this.liveMarker.setLatLng(position);
-    this.liveMarker.setPopupContent(
-      popupContent
-    );
+      latitude: event.latitude,
+      longitude: event.longitude,
+
+      speedMph:
+        event.speedMph ??
+        previous?.speedMph ??
+        null,
+
+      headingDegrees:
+        event.headingDegrees ??
+        previous?.headingDegrees ??
+        null,
+
+      fuelLevelPercent:
+        event.fuelLevelPercent ??
+        previous?.fuelLevelPercent ??
+        null,
+
+      batteryVoltage:
+        event.batteryVoltage ??
+        previous?.batteryVoltage ??
+        null,
+
+      engineTempF:
+        event.engineTempF ??
+        previous?.engineTempF ??
+        null,
+
+      odometerMiles:
+        event.odometerMiles ??
+        previous?.odometerMiles ??
+        null,
+
+      checkEngine:
+        event.checkEngine ??
+        previous?.checkEngine ??
+        false,
+
+      recordedAt: event.recordedAt
+    };
+
+    this.currentState.set(updated);
+
+    // THIS is what actually moves/rotates the marker.
+    this.renderCurrentMarker(updated);
 
     if (
       this.mapMode() === 'LIVE' &&
       this.autoFollow()
     ) {
-      this.map.panTo(position, {
-        animate: true,
-        duration: 0.6
-      });
+      this.map?.panTo(
+        [
+          updated.latitude!,
+          updated.longitude!
+        ],
+        {
+          animate: true,
+          duration: 0.5
+        }
+      );
     }
   }
 
@@ -348,6 +395,7 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   private renderCurrentMarker(
     state: FleetTelematicsLocation
   ): void {
+
     if (
       !this.map ||
       state.latitude == null ||
@@ -364,18 +412,26 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
     const icon = this.createVehicleIcon(state);
 
     if (!this.liveMarker) {
-      this.liveMarker = L.marker(position, { icon })
+      this.liveMarker = L.marker(
+        position,
+        { icon }
+      )
         .addTo(this.liveVehicleLayer)
-        .bindPopup(this.buildVehiclePopup(state));
-    } else {
-      this.liveMarker.setLatLng(position);
-      this.liveMarker.setIcon(icon);
-      this.liveMarker.setPopupContent(
-        this.buildVehiclePopup(state)
-      );
+        .bindPopup(
+          this.buildVehiclePopup(state)
+        );
+
+      return;
     }
 
-    this.map.setView(position, 15);
+    this.liveMarker.setLatLng(position);
+
+    // Important for heading changes
+    this.liveMarker.setIcon(icon);
+
+    this.liveMarker.setPopupContent(
+      this.buildVehiclePopup(state)
+    );
   }
 
   private buildVehiclePopup(
@@ -557,31 +613,52 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
         return;
       }
 
+      const nextPoint =
+        this.playbackPoints[this.playbackIndex + 1];
+
+      let heading = this.playbackHeading;
+
+      if (
+        nextPoint &&
+        nextPoint.latitude !== null &&
+        nextPoint.longitude !== null
+      ) {
+        heading = this.calculateBearing(
+          point.latitude,
+          point.longitude,
+          nextPoint.latitude,
+          nextPoint.longitude
+        );
+
+        this.playbackHeading = heading;
+      }
+
       const position: L.LatLngExpression = [
         point.latitude,
         point.longitude
       ];
 
+      const icon = L.divIcon({
+        className: 'playback-marker',
+        html: `
+        <span
+          class="material-icons playback-icon"
+          style="transform: rotate(${heading}deg);"
+        >
+          navigation
+        </span>
+      `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
       if (!this.playbackMarker) {
         this.playbackMarker = L.marker(position, {
-          icon: L.divIcon({
-            className: 'playback-marker',
-            html: `
-            <span
-              class="material-icons playback-icon"
-              style="transform: rotate(${
-              this.currentState()?.headingDegrees ?? 0
-            }deg)"
-            >
-              navigation
-            </span>
-          `,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-          })
+          icon
         }).addTo(this.tripLayer);
       } else {
         this.playbackMarker.setLatLng(position);
+        this.playbackMarker.setIcon(icon);
       }
 
       this.playbackMarker.setPopupContent(`
@@ -590,7 +667,10 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
       Time: ${new Date(point.recordedAt).toLocaleString()}
     `);
 
-      if (this.autoFollow()) {
+      if (
+        this.mapMode() === 'HISTORY' &&
+        this.autoFollow()
+      ) {
         this.map?.panTo(position, {
           animate: true,
           duration: 0.4
@@ -702,5 +782,38 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
       iconAnchor: [17, 17],
       popupAnchor: [0, -14]
     });
+  }
+
+  private calculateBearing(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number {
+    const startLat = this.toRadians(lat1);
+    const startLon = this.toRadians(lon1);
+    const endLat = this.toRadians(lat2);
+    const endLon = this.toRadians(lon2);
+
+    const deltaLon = endLon - startLon;
+
+    const y =
+      Math.sin(deltaLon) *
+      Math.cos(endLat);
+
+    const x =
+      Math.cos(startLat) * Math.sin(endLat) -
+      Math.sin(startLat) *
+      Math.cos(endLat) *
+      Math.cos(deltaLon);
+
+    const bearing =
+      Math.atan2(y, x) * (180 / Math.PI);
+
+    return (bearing + 360) % 360;
+  }
+
+  private toRadians(value: number): number {
+    return value * (Math.PI / 180);
   }
 }
