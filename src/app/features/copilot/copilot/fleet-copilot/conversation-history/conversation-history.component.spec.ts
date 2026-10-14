@@ -12,6 +12,7 @@ describe('ConversationHistoryComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(ConversationHistoryComponent);
+    fixture.componentRef.setInput('conversations', []);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });

@@ -46,55 +46,32 @@
 
     @if (mapMode() === 'HISTORY') {
       <div class="range-controls">
-        <div class="map-controls">
-          <div class="map-mode-controls">
+        <button
+          mat-stroked-button
+          type="button"
+          [class.active]="selectedRange() === 'TODAY'"
+          (click)="loadRange('TODAY')"
+        >
+          Today
+        </button>
 
-            @if (mapMode() === 'LIVE') {
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="toggleAutoFollow()"
-              >
-                <mat-icon>
-                  {{ autoFollow() ? 'my_location' : 'location_disabled' }}
-                </mat-icon>
+        <button
+          mat-stroked-button
+          type="button"
+          [class.active]="selectedRange() === '7_DAYS'"
+          (click)="loadRange('7_DAYS')"
+        >
+          Last 7 Days
+        </button>
 
-                {{ autoFollow() ? 'Following Vehicle' : 'Follow Vehicle' }}
-              </button>
-            }
-          </div>
-
-          @if (mapMode() === 'HISTORY') {
-            <div class="range-controls">
-              <button
-                mat-stroked-button
-                type="button"
-                [class.active]="selectedRange() === 'TODAY'"
-                (click)="loadRange('TODAY')"
-              >
-                Today
-              </button>
-
-              <button
-                mat-stroked-button
-                type="button"
-                [class.active]="selectedRange() === '7_DAYS'"
-                (click)="loadRange('7_DAYS')"
-              >
-                Last 7 Days
-              </button>
-
-              <button
-                mat-stroked-button
-                type="button"
-                [class.active]="selectedRange() === '30_DAYS'"
-                (click)="loadRange('30_DAYS')"
-              >
-                Last 30 Days
-              </button>
-            </div>
-          }
-        </div>
+        <button
+          mat-stroked-button
+          type="button"
+          [class.active]="selectedRange() === '30_DAYS'"
+          (click)="loadRange('30_DAYS')"
+        >
+          Last 30 Days
+        </button>
       </div>
     }
 
@@ -230,6 +207,12 @@
           <strong>
             {{ state.recordedAt | date:'short' }}
           </strong>
+        </article>
+
+        <article>
+          <mat-icon>warning</mat-icon>
+          <span>Check Engine</span>
+          <strong>{{ state.checkEngine ? 'On' : 'Off' }}</strong>
         </article>
       </div>
     </section>

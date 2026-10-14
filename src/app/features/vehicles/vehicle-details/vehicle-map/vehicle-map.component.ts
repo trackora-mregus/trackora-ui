@@ -26,6 +26,12 @@ import {
 } from '../../../../shared/models/fleet-map.models';
 import { FleetLiveLocationService } from '../../../../core/services/fleet-live-location.service';
 import {MatTooltip} from '@angular/material/tooltip';
+import {
+  createVehicleLiveStateAccumulator,
+  mergeAuthoritativeVehicleState,
+  mergeLiveVehicleEvent,
+  VehicleLiveStateAccumulator
+} from '../../../../shared/models/vehicle-live-state';
 
 type ValidTelematicsHistoryPoint =
   TelematicsHistoryPoint & {
@@ -67,6 +73,7 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   private playbackHeading = 0;
   private playbackMarker?: L.Marker;
   private playbackTimer?: ReturnType<typeof setInterval>;
+  private readonly pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
   private playbackPoints: TelematicsHistoryPoint[] = [];
   private playbackIndex = 0;
 
@@ -96,8 +103,10 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   private markerLayer = L.layerGroup();
   private liveMarker?: L.Marker;
   private readonly liveVehicleLayer = L.layerGroup();
+  private liveState?: VehicleLiveStateAccumulator;
 
   ngAfterViewInit(): void {
+    this.liveState = createVehicleLiveStateAccumulator(this.vehicleId());
     this.initializeMap();
     this.observeMapSize();
 
@@ -105,7 +114,7 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
     this.loadRange('TODAY');
     this.subscribeToLiveUpdates();
 
-    setTimeout(() => {
+    this.scheduleTask(() => {
       this.map?.invalidateSize(true);
     }, 300);
   }
@@ -117,11 +126,16 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
       clearInterval(this.playbackTimer);
     }
 
+    for (const timeout of this.pendingTimeouts) {
+      clearTimeout(timeout);
+    }
+    this.pendingTimeouts.clear();
+
     this.map?.remove();
   }
 
   private refreshMapSize(): void {
-    setTimeout(() => {
+    this.scheduleTask(() => {
       this.map?.invalidateSize(true);
     }, 100);
   }
@@ -135,7 +149,15 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
 
     const state = this.currentState();
 
-    setTimeout(() => {
+    if (this.map && !this.map.hasLayer(this.liveVehicleLayer)) {
+      this.liveVehicleLayer.addTo(this.map);
+    }
+
+    if (state) {
+      this.renderCurrentMarker(state);
+    }
+
+    this.scheduleTask(() => {
       this.map?.invalidateSize(true);
 
       if (
@@ -153,12 +175,24 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
     }, 100);
   }
 
+  private scheduleTask(callback: () => void, delay: number): void {
+    const timeout = setTimeout(() => {
+      this.pendingTimeouts.delete(timeout);
+      callback();
+    }, delay);
+    this.pendingTimeouts.add(timeout);
+  }
+
   showHistoryMode(): void {
     this.mapMode.set('HISTORY');
     this.stopTripPlayback(true);
     this.tripLayer.clearLayers();
     this.tripPage.set(0);
     this.reloadTrips();
+
+    if (this.map?.hasLayer(this.liveVehicleLayer)) {
+      this.map.removeLayer(this.liveVehicleLayer);
+    }
 
     this.refreshMapSize();
   }
@@ -260,21 +294,15 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   }
 
   private subscribeToLiveUpdates(): void {
+    const fleetId = this.fleetId();
+    const vehicleId = this.vehicleId();
+
     this.fleetLiveLocationService
-      .connectToFleet(this.fleetId())
-      .pipe(
-        takeUntilDestroyed(this.destroyRef)
-      )
+      .connectToFleet(fleetId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: event => {
-          console.log(
-            'Vehicle map websocket event:',
-            event
-          );
-
-          if (
-            event.vehicleId !== this.vehicleId()
-          ) {
+          if (event.vehicleId !== vehicleId) {
             return;
           }
 
@@ -283,7 +311,7 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
 
         error: error => {
           console.error(
-            'Vehicle map websocket error:',
+            'Vehicle map WebSocket stream failed',
             error
           );
         }
@@ -293,84 +321,35 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   private updateLiveVehicle(
     event: LiveVehicleLocationEvent
   ): void {
+    const accumulator = this.getLiveStateAccumulator();
+    const merged = mergeLiveVehicleEvent(accumulator, event);
+    this.liveState = merged;
 
-    if (
-      event.latitude == null ||
-      event.longitude == null
-    ) {
+    if (merged === accumulator || !merged.state) {
       return;
     }
 
     const previous = this.currentState();
-
-    const updated: FleetTelematicsLocation = {
-      vehicleId: event.vehicleId,
-      status: 'ONLINE',
-
-      label:
-        event.vehicleName ??
-        previous?.label ??
-        this.vehicleName(),
-
-      licensePlate:
-        event.licensePlate ??
-        previous?.licensePlate ??
-        this.licensePlate(),
-
-      latitude: event.latitude,
-      longitude: event.longitude,
-
-      speedMph:
-        event.speedMph ??
-        previous?.speedMph ??
-        null,
-
-      headingDegrees:
-        event.headingDegrees ??
-        previous?.headingDegrees ??
-        null,
-
-      fuelLevelPercent:
-        event.fuelLevelPercent ??
-        previous?.fuelLevelPercent ??
-        null,
-
-      batteryVoltage:
-        event.batteryVoltage ??
-        previous?.batteryVoltage ??
-        null,
-
-      engineTempF:
-        event.engineTempF ??
-        previous?.engineTempF ??
-        null,
-
-      odometerMiles:
-        event.odometerMiles ??
-        previous?.odometerMiles ??
-        null,
-
-      checkEngine:
-        event.checkEngine ??
-        previous?.checkEngine ??
-        false,
-
-      recordedAt: event.recordedAt
-    };
-
+    const updated = merged.state;
     this.currentState.set(updated);
 
-    // THIS is what actually moves/rotates the marker.
+    if (this.mapMode() !== 'LIVE') {
+      return;
+    }
+
     this.renderCurrentMarker(updated);
 
     if (
-      this.mapMode() === 'LIVE' &&
+      updated.latitude != null &&
+      updated.longitude != null &&
+      (updated.latitude !== previous?.latitude ||
+        updated.longitude !== previous?.longitude) &&
       this.autoFollow()
     ) {
       this.map?.panTo(
         [
-          updated.latitude!,
-          updated.longitude!
+          updated.latitude,
+          updated.longitude
         ],
         {
           animate: true,
@@ -381,25 +360,46 @@ export class VehicleMapComponent implements AfterViewInit, OnDestroy {
   }
 
   private loadCurrentState(): void {
+    this.loading.set(true);
+    this.errorMessage.set(null);
+
     this.telematicsService
       .getCurrentVehicleState(this.vehicleId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: state => {
-          this.currentState.set(state);
-
-          this.renderCurrentMarker(
-            state,
-            true
+          const merged = mergeAuthoritativeVehicleState(
+            this.getLiveStateAccumulator(),
+            state
           );
+
+          this.liveState = merged;
+          this.loading.set(false);
+
+          if (!merged.state) {
+            return;
+          }
+
+          this.currentState.set(merged.state);
+
+          if (this.mapMode() === 'LIVE') {
+            this.renderCurrentMarker(merged.state, true);
+          }
         },
         error: error => {
+          this.loading.set(false);
+          this.errorMessage.set('Unable to load current vehicle state.');
           console.error(
             'Unable to load current vehicle state',
             error
           );
         }
       });
+  }
+
+  private getLiveStateAccumulator(): VehicleLiveStateAccumulator {
+    this.liveState ??= createVehicleLiveStateAccumulator(this.vehicleId());
+    return this.liveState;
   }
 
   private renderCurrentMarker(

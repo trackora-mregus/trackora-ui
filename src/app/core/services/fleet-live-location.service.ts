@@ -34,7 +34,7 @@ export class FleetLiveLocationService {
     const stream = new Observable<LiveVehicleLocationEvent>(
       observer => {
 
-        const client = new Client({
+        const client = this.createClient({
           brokerURL: environment.wsBaseUrl,
           reconnectDelay: 5000,
 
@@ -46,10 +46,6 @@ export class FleetLiveLocationService {
         });
 
         client.onConnect = () => {
-          console.log(
-            `WebSocket connected to fleet ${fleetId}`
-          );
-
           client.subscribe(
             `/topic/fleets/${fleetId}`,
             (message: IMessage) => {
@@ -58,11 +54,6 @@ export class FleetLiveLocationService {
                   JSON.parse(
                     message.body
                   ) as LiveVehicleLocationEvent;
-
-                console.log(
-                  'Live vehicle event:',
-                  event
-                );
 
                 observer.next(event);
 
@@ -111,5 +102,11 @@ export class FleetLiveLocationService {
     this.streams.set(fleetId, stream);
 
     return stream;
+  }
+
+  protected createClient(
+    options: ConstructorParameters<typeof Client>[0]
+  ): Client {
+    return new Client(options);
   }
 }

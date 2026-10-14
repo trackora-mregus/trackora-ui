@@ -343,7 +343,16 @@ export class FleetMapComponent implements AfterViewInit {
   private renderMarkers(locations: FleetTelematicsLocation[]): void {
     this.markersLayer.clearLayers();
 
-    locations.forEach(location => {
+    const positionedLocations = locations.filter(
+      (location): location is FleetTelematicsLocation & {
+        latitude: number;
+        longitude: number;
+      } =>
+        location.latitude != null &&
+        location.longitude != null
+    );
+
+    positionedLocations.forEach(location => {
       L.marker(
         [location.latitude, location.longitude],
         { icon: this.createVehicleIcon(location) }
@@ -366,11 +375,11 @@ export class FleetMapComponent implements AfterViewInit {
     });
 
     if (
-      locations.length > 0 &&
+      positionedLocations.length > 0 &&
       !this.tripPlaybackActive()
     ) {
       const bounds = L.latLngBounds(
-        locations.map(location => [
+        positionedLocations.map(location => [
           location.latitude,
           location.longitude
         ])
@@ -437,17 +446,17 @@ export class FleetMapComponent implements AfterViewInit {
           ? {
             ...location,
             status: onlineStatus,
-            label: event.vehicleName,
+            label: event.vehicleName ?? location.label,
             licensePlate: event.licensePlate ?? location.licensePlate,
-            latitude: event.latitude,
-            longitude: event.longitude,
-            speedMph: event.speedMph,
-            engineTempF: event.engineTempF,
-            batteryVoltage: event.batteryVoltage,
-            odometerMiles: event.odometerMiles,
-            headingDegrees: event.headingDegrees,
-            fuelLevelPercent: event.fuelLevelPercent,
-            checkEngine: event.checkEngine,
+            latitude: event.latitude ?? location.latitude,
+            longitude: event.longitude ?? location.longitude,
+            speedMph: event.speedMph ?? location.speedMph,
+            engineTempF: event.engineTempF ?? location.engineTempF,
+            batteryVoltage: event.batteryVoltage ?? location.batteryVoltage,
+            odometerMiles: event.odometerMiles ?? location.odometerMiles,
+            headingDegrees: event.headingDegrees ?? location.headingDegrees,
+            fuelLevelPercent: event.fuelLevelPercent ?? location.fuelLevelPercent,
+            checkEngine: event.checkEngine ?? location.checkEngine,
             recordedAt: event.recordedAt
           }
           : location
@@ -457,17 +466,17 @@ export class FleetMapComponent implements AfterViewInit {
         {
           vehicleId: event.vehicleId,
           status: onlineStatus,
-          label: event.vehicleName,
+          label: event.vehicleName ?? 'Vehicle',
           licensePlate: event.licensePlate ?? '',
-          latitude: event.latitude,
-          longitude: event.longitude,
-          speedMph: event.speedMph,
-          engineTempF: event.engineTempF,
-          batteryVoltage: event.batteryVoltage,
-          odometerMiles: event.odometerMiles,
-          headingDegrees: event.headingDegrees,
-          fuelLevelPercent: event.fuelLevelPercent,
-          checkEngine: event.checkEngine,
+          latitude: event.latitude ?? null,
+          longitude: event.longitude ?? null,
+          speedMph: event.speedMph ?? null,
+          engineTempF: event.engineTempF ?? null,
+          batteryVoltage: event.batteryVoltage ?? null,
+          odometerMiles: event.odometerMiles ?? null,
+          headingDegrees: event.headingDegrees ?? null,
+          fuelLevelPercent: event.fuelLevelPercent ?? null,
+          checkEngine: event.checkEngine ?? false,
           recordedAt: event.recordedAt
         }
       ];

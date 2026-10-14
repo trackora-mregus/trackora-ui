@@ -3,8 +3,8 @@ export interface FleetTelematicsLocation {
   status: 'ONLINE' | 'STALE' | 'OFFLINE';
   label: string;
   licensePlate: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   speedMph: number | null;
   engineTempF: number | null;
   batteryVoltage: number | null;
@@ -18,17 +18,17 @@ export interface FleetTelematicsLocation {
 export interface LiveVehicleLocationEvent {
   vehicleId: string;
   fleetId: string;
-  vehicleName: string;
-  licensePlate: string | null;
-  latitude: number;
-  longitude: number;
-  speedMph: number | null;
-  engineTempF: number | null;
-  batteryVoltage: number | null;
-  odometerMiles: number | null;
-  headingDegrees: number | null;
-  fuelLevelPercent: number | null;
-  checkEngine: boolean;
+  vehicleName?: string | null;
+  licensePlate?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  speedMph?: number | null;
+  engineTempF?: number | null;
+  batteryVoltage?: number | null;
+  odometerMiles?: number | null;
+  headingDegrees?: number | null;
+  fuelLevelPercent?: number | null;
+  checkEngine?: boolean | null;
   recordedAt: string;
 }
 
