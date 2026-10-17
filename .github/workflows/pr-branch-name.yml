@@ -1,0 +1,41 @@
+name: Validate PR branch
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  branch-name:
+    name: Enforce issue branch name
+    runs-on: ubuntu-latest
+    env:
+      BRANCH_NAME: ${{ github.head_ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate branch name and issue
+        shell: bash
+        run: |
+          pattern='^(feature|fix|security|chore)/([1-9][0-9]*)-[a-z0-9]+(-[a-z0-9]+)*$'
+          if [[ ! "$BRANCH_NAME" =~ $pattern ]]; then
+            echo "Branch '$BRANCH_NAME' does not follow <type>/<issue-number>-<slug>."
+            echo "Allowed types: feature, fix, security, chore."
+            echo "Example: feature/1-codex-development-workflow"
+            exit 1
+          fi
+
+          issue_number="${BASH_REMATCH[2]}"
+          issue_json="$(gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number")"
+
+          if jq -e 'has("pull_request")' <<<"$issue_json" >/dev/null; then
+            echo "#$issue_number is a pull request, not a GitHub issue."
+            exit 1
+          fi
+
+          issue_state="$(jq -r '.state' <<<"$issue_json")"
+          issue_title="$(jq -r '.title' <<<"$issue_json")"
+          echo "Branch references GitHub issue #$issue_number ($issue_state): $issue_title"

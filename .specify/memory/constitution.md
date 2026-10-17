@@ -9,7 +9,7 @@ project architecture and conventions.
 
 The current frontend foundation includes:
 
-- Angular 20
+- Angular 21
 - Standalone components
 - TypeScript
 - Angular Signals

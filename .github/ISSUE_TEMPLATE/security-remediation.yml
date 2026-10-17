@@ -1,0 +1,62 @@
+name: Security remediation
+description: Track an approved frontend remediation without disclosing an unpatched vulnerability.
+title: '[Security]: '
+body:
+  - type: markdown
+    attributes:
+      value: 'Do not disclose an exploitable or unpatched vulnerability here. Use GitHub private vulnerability reporting first. This form is only for sanitized remediation tracking.'
+  - type: textarea
+    id: summary
+    attributes:
+      label: Sanitized remediation summary
+      description: Describe the control or class of risk without exploit instructions, credentials, tenant data, GPS, telemetry, or sensitive evidence.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+        - Not yet assessed
+    validations:
+      required: true
+  - type: textarea
+    id: affected
+    attributes:
+      label: Affected components and trust boundaries
+      description: Identify affected routes, roles, tenant data classes, APIs, WebSockets, or integrations without exposing exploit details.
+    validations:
+      required: true
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Required remediation and acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification plan
+      description: Include authorization/tenant negative tests, browser checks, regression tests, and monitoring as applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: rollout
+    attributes:
+      label: Coordinated rollout and rollback
+      description: Address backend compatibility and Vercel production deployment ordering.
+    validations:
+      required: true
+  - type: checkboxes
+    id: disclosure
+    attributes:
+      label: Disclosure checks
+      options:
+        - label: If sensitive vulnerability details exist, I am handling them through a private channel.
+          required: false
+        - label: This issue contains no secrets, tokens, tenant data, GPS, telemetry payloads, or exploit instructions.
+          required: true
