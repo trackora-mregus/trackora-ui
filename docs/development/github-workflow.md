@@ -82,8 +82,15 @@ Use locked dependencies and run applicable checks:
 npm ci
 npx tsc -p tsconfig.app.json --noEmit
 npm test -- --watch=false
+npm run test:build
 npm run build
 ```
+
+Sentry operations and private source-map release checks are documented in [../operations/sentry.md](../operations/sentry.md). `npm run build` remains credential-free when monitoring is absent or disabled; an enabled Vercel build is fail-closed. Synthetic monitoring errors are allowed only in an isolated protected preview and must never remain in a production candidate or be triggered in Production.
+
+For trusted Preview verification, start from a clean committed revision and inject the upload token from an approved local secret provider without putting it in a command, file, shared Preview variable, or generated artifact. Run `npm run build:prebuilt-preview` with an explicit `stage-a` or `stage-b` verification stage. This prepares and scans `.vercel/output` without deploying. Only a separately authorized operator may run `npm run deploy:prebuilt-preview`; it invokes pinned Vercel CLI `50.4.0` with the fixed `deploy --prebuilt --target=preview` argument list. It cannot accept passthrough flags, target Production, promote, or create an alias.
+
+The monitored build derives `trackora-ui@<full HEAD SHA>` from Git and generates one custom Build Output deployment ID used by the browser, Sentry upload, and `.vercel/output/config.json`. Source-map upload, cleanup, packaging, identity, or final-scan failure blocks readiness unconditionally. Stage A and trigger-free Stage B require distinct clean commits and distinct IDs. Never run a synthetic error in Production.
 
 There is currently no lint script or ESLint configuration. Prettier can be checked on applicable changed files with `npx prettier --check <files>`. Record exact commands and results in the pull request, including unavailable checks and manual browser validation.
 

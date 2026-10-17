@@ -9,6 +9,7 @@ import {
   LiveVehicleLocationEvent,
 } from '../../../../shared/models/fleet-map.models';
 import { VehicleMapComponent } from './vehicle-map.component';
+import { runMonitoringBoundaryMatrix } from '../../../../../testing/monitoring-boundary-fixtures.spec-helper';
 
 const restState: FleetTelematicsLocation = {
   vehicleId: 'vehicle-1',
@@ -293,5 +294,22 @@ describe('VehicleMapComponent live updates', () => {
     second.detectChanges();
     expect(telematics.getCurrentVehicleState).toHaveBeenCalledTimes(2);
     second.destroy();
+  });
+
+  it('preserves REST, live telemetry, and history isolation across every monitoring boundary state', async () => {
+    initializeWithoutLeaflet();
+    component.mapMode.set('HISTORY');
+    let sequence = 1;
+    await runMonitoringBoundaryMatrix(() => {
+      const speedMph = 40 + sequence;
+      events.next({
+        vehicleId: 'vehicle-1', fleetId: 'fleet-1', speedMph,
+        recordedAt: `2026-09-25T12:0${sequence}:00Z`
+      });
+      expect(component.currentState()?.speedMph).toBe(speedMph);
+      expect(component.mapMode()).toBe('HISTORY');
+      sequence += 1;
+    });
+    expect(telematics.getCurrentVehicleState).toHaveBeenCalledWith('vehicle-1');
   });
 });

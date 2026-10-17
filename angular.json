@@ -29,7 +29,7 @@
               "src/material-theme.scss",
               "src/styles.css",
               "node_modules/leaflet/dist/leaflet.css"
-              ]
+            ]
           },
           "configurations": {
             "production": {
@@ -55,6 +55,15 @@
                   "with": "src/environments/environment.prod.ts"
                 }
               ]
+            },
+            "sentry": {
+              "sourceMap": {
+                "scripts": true,
+                "styles": false,
+                "hidden": true,
+                "vendor": true,
+                "sourcesContent": true
+              }
             },
             "development": {
               "optimization": false,

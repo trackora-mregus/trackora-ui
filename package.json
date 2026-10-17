@@ -4,9 +4,14 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "node scripts/sentry-build.mjs",
+    "build:angular": "ng build",
+    "build:prebuilt-preview": "node scripts/sentry-prebuilt.mjs prepare",
+    "deploy:prebuilt-preview": "node scripts/sentry-prebuilt.mjs deploy-preview",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:build": "node --test scripts/sentry-build.test.mjs",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "private": true,
   "packageManager": "npm@11.12.1",
@@ -19,6 +24,7 @@
     "@angular/material": "^21.2.10",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
+    "@sentry/angular": "11.8.0",
     "@stomp/stompjs": "^7.3.0",
     "chart.js": "^4.5.1",
     "leaflet": "^1.9.4",
@@ -31,6 +37,7 @@
     "@angular/build": "^21.2.10",
     "@angular/cli": "^21.2.10",
     "@angular/compiler-cli": "^21.2.0",
+    "@sentry/cli": "3.8.0",
     "@types/leaflet": "^1.9.21",
     "jsdom": "^28.0.0",
     "prettier": "^3.8.1",

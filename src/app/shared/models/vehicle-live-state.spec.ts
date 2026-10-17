@@ -6,6 +6,7 @@ import {
   mergeAuthoritativeVehicleState,
   mergeLiveVehicleEvent,
 } from './vehicle-live-state';
+import { runMonitoringBoundaryMatrix } from '../../../testing/monitoring-boundary-fixtures.spec-helper';
 
 const initial: FleetTelematicsLocation = {
   vehicleId: 'vehicle-1',
@@ -132,5 +133,13 @@ describe('vehicle live state accumulator', () => {
     expect(base.state?.speedMph).toBe(40);
     expect(changed.state?.speedMph).toBe(80);
     expect(changed.state).not.toBe(base.state);
+  });
+
+  it('preserves partial-update and ordering state across every monitoring boundary state', async () => {
+    await runMonitoringBoundaryMatrix(() => {
+      const newer = mergeLiveVehicleEvent(seeded(), {vehicleId: initial.vehicleId, fleetId: 'fleet-1', speedMph: 55, recordedAt: '2026-09-25T12:02:00Z'});
+      const older = mergeLiveVehicleEvent(newer, {vehicleId: initial.vehicleId, fleetId: 'fleet-1', speedMph: 10, fuelLevelPercent: 0, recordedAt: '2026-09-25T12:01:00Z'});
+      expect(older.state).toMatchObject({speedMph: 55, fuelLevelPercent: 0});
+    });
   });
 });

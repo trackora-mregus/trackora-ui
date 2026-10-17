@@ -2,6 +2,7 @@ import { Client } from '@stomp/stompjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FleetLiveLocationService } from './fleet-live-location.service';
+import { runMonitoringBoundaryMatrix } from '../../../testing/monitoring-boundary-fixtures.spec-helper';
 
 class MockClient {
   onConnect?: () => void;
@@ -91,5 +92,19 @@ describe('FleetLiveLocationService', () => {
     });
     expect(next).toHaveBeenCalledTimes(1);
     subscription.unsubscribe();
+  });
+
+  it('preserves shared-consumer and teardown behavior across every monitoring boundary state', async () => {
+    await runMonitoringBoundaryMatrix(() => {
+      const service = new TestFleetLiveLocationService();
+      const stream = service.connectToFleet('fleet-1');
+      const first = stream.subscribe();
+      const second = stream.subscribe();
+      expect(service.clients).toHaveLength(1);
+      first.unsubscribe();
+      expect(service.clients[0].deactivate).not.toHaveBeenCalled();
+      second.unsubscribe();
+      expect(service.clients[0].deactivate).toHaveBeenCalledOnce();
+    });
   });
 });

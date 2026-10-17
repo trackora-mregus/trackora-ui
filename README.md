@@ -10,6 +10,7 @@ Trackora UI is the modern Angular frontend for **Trackora**, a cloud-native flee
 The application consumes the Trackora REST API and provides an intuitive, responsive experience for fleet managers, dispatchers, and administrators.
 
 Contributor and Codex workflow guidance is available in [docs/development/github-workflow.md](docs/development/github-workflow.md).
+Privacy, release, source-map, disablement, and rollback guidance for frontend error monitoring is in [docs/operations/sentry.md](docs/operations/sentry.md).
 
 ---
 

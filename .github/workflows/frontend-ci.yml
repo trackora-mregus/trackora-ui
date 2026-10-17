@@ -2,9 +2,12 @@ name: Frontend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -23,5 +26,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test -- --watch=false
+
+      - name: Build contract tests
+        run: npm run test:build
+
+      - name: Ordinary optimized build
         run: npm run build
