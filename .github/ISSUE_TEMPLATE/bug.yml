@@ -1,0 +1,71 @@
+name: Bug report
+description: Report reproducible incorrect behavior in the Trackora frontend.
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, access tokens, tenant data, precise GPS, raw telemetry, sensitive documents, personal data, or exploitable security details.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong, and which user-facing behavior is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include deployment (local, Vercel preview, production), browser/version, viewport, and relevant role without sharing tenant data.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and scope
+      description: Describe affected roles, screens, fleets, vehicles, or environments using sanitized identifiers.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add safe console/network details or screenshots. Redact secrets, personal data, GPS, telemetry payloads, and tenant identifiers.
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression test idea
+      description: Describe an automated test that would prevent recurrence, if known.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched for an existing issue.
+          required: true
+        - label: I removed secrets, tokens, tenant data, precise GPS, raw telemetry, and personal data.
+          required: true

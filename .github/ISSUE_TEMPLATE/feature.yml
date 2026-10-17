@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a user-facing or operational Trackora frontend capability.
+title: '[Feature]: '
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: Describe the user or operational need without prescribing implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should users or operators be able to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: scenarios
+    attributes:
+      label: User scenarios and acceptance criteria
+      placeholder: |
+        Given ...
+        When ...
+        Then ...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and exclusions
+      description: Identify what is included and explicitly out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: API, WebSocket, browser, and deployment impact
+      description: Note known backend contract, telemetry, environment, Vercel, or rollout implications.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security, tenant-isolation, privacy, and operational risks
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification expectations
+      description: Identify unit, regression, accessibility, performance, browser, and production-like checks.
+  - type: checkboxes
+    id: spec
+    attributes:
+      label: Spec Kit
+      options:
+        - label: This request will use Spec Kit before implementation if it is non-trivial or changes architecture, security, telemetry, data ownership, infrastructure, or public contracts.
+          required: true

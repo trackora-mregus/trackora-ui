@@ -1,13 +1,15 @@
 # 🚗 Trackora UI
 
-![Angular](https://img.shields.io/badge/Angular-20-red)
+![Angular](https://img.shields.io/badge/Angular-21-red)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
-![Angular Material](https://img.shields.io/badge/Angular%20Material-20-green)
+![Angular Material](https://img.shields.io/badge/Angular%20Material-21-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 Trackora UI is the modern Angular frontend for **Trackora**, a cloud-native fleet operations platform designed to help organizations manage vehicles, maintenance, fuel usage, operational alerts, and real-time fleet activity from a single dashboard.
 
 The application consumes the Trackora REST API and provides an intuitive, responsive experience for fleet managers, dispatchers, and administrators.
+
+Contributor and Codex workflow guidance is available in [docs/development/github-workflow.md](docs/development/github-workflow.md).
 
 ---
 
@@ -139,7 +141,7 @@ Features include:
 
 # 🛠 Tech Stack
 
-- Angular 20
+- Angular 21
 - Angular Material
 - TypeScript
 - RxJS

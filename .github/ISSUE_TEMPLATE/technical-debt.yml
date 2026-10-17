@@ -1,0 +1,42 @@
+name: Technical debt
+description: Propose a focused frontend maintainability, reliability, testing, or tooling improvement.
+title: '[Debt]: '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current problem
+      description: What recurring development, reliability, performance, accessibility, or operational cost exists today?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Cite affected components, services, tests, build behavior, incidents, or duplication.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome and acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Scope boundaries
+      description: State which user behavior and backend contracts must remain unchanged and what is out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Compatibility, privacy, and deployment risk
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification plan
+      description: List focused/full tests, TypeScript/build checks, accessibility/performance checks, or operational validation.
+    validations:
+      required: true
