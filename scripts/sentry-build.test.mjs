@@ -15,10 +15,12 @@ import {
   createBrowserBuildEnvironment,
   createBuildPlan,
   deriveCleanGitIdentity,
+  deployPreparedPreviewArtifact,
   generateCustomDeploymentId,
   inventorySourceMaps,
   packageVercelBuildOutput,
   runEnabledBuildTransaction,
+  resolveVercelProjectLink,
   scanVercelBuildOutput,
   snapshotSourceMapArtifacts,
   validateSentryPrivacyControls,
@@ -558,17 +560,120 @@ test('identity mismatch, packaging failure, and final-scan failure cannot become
 test('prebuilt deploy command is pinned and Preview-only with no secret-bearing arguments', () => {
   assert.deepEqual(createPrebuiltPreviewCommand(), {
     command: 'npx',
-    args: ['--yes', 'vercel@50.4.0', 'deploy', '--prebuilt', '--target=preview'],
+    args: ['--yes', 'vercel@64.5.0', 'deploy', '--prebuilt', '--target=preview'],
   });
   for (const args of [
     ['--prod'],
     ['--target=production'],
+    ['--target', 'production'],
+    ['--force'],
+    ['--scope', 'another-team'],
     ['promote'],
     ['alias'],
     ['env', 'add'],
   ]) {
     assert.throws(() => createPrebuiltPreviewCommand(args), /Preview-only/);
   }
+});
+
+test('Vercel repo linkage accepts per-project orgId and legacy top-level fallback', () => {
+  assert.deepEqual(
+    resolveVercelProjectLink(
+      {
+        orgId: 'team_legacy_not_selected',
+        projects: [
+          { id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' },
+        ],
+      },
+      '.',
+    ),
+    { projectId: 'prj_current', orgId: 'team_current', directory: '.' },
+  );
+  assert.deepEqual(
+    resolveVercelProjectLink(
+      {
+        orgId: 'team_legacy',
+        projects: [{ id: 'prj_legacy', name: 'trackora-ui', directory: '.' }],
+      },
+      '.',
+    ),
+    { projectId: 'prj_legacy', orgId: 'team_legacy', directory: '.' },
+  );
+});
+
+test('Vercel repo linkage fails closed for missing or ambiguous organization IDs', () => {
+  for (const config of [
+    { projects: [{ id: 'prj_missing', name: 'trackora-ui', directory: '.' }] },
+    {
+      projects: [
+        { id: 'prj_one', name: 'one', directory: '.', orgId: 'team_one' },
+        { id: 'prj_two', name: 'two', directory: '.', orgId: 'team_two' },
+      ],
+    },
+    { orgId: 'team_legacy', projects: [] },
+    { orgId: 'team_legacy', projects: 'malformed' },
+  ]) {
+    assert.throws(() => resolveVercelProjectLink(config, '.'), /Vercel repo linkage failed/);
+  }
+});
+
+test('prepared Preview deployment only scans and invokes the pinned CLI', async () => {
+  const calls = [];
+  await deployPreparedPreviewArtifact({
+    outputRoot: '/prepared/.vercel/output',
+    dist: identity.dist,
+    repositoryDirectory: '.',
+    repoConfig: {
+      projects: [{ id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' }],
+    },
+    environment: validEnabledEnvironment,
+    scanOutput: async (options) => {
+      calls.push({ action: 'scan', options });
+    },
+    invoke: async (command, args, environment) => {
+      calls.push({ action: 'invoke', command, args, environment });
+    },
+  });
+
+  assert.deepEqual(
+    calls.map(({ action }) => action),
+    ['scan', 'invoke'],
+  );
+  assert.equal(calls[0].options.dist, identity.dist);
+  assert.deepEqual(calls[1].args, [
+    '--yes',
+    'vercel@64.5.0',
+    'deploy',
+    '--prebuilt',
+    '--target=preview',
+  ]);
+  assert.equal(calls[1].environment.SENTRY_AUTH_TOKEN, undefined);
+  assert.equal(
+    calls.some(({ action }) => ['build', 'generate-id', 'upload-maps'].includes(action)),
+    false,
+  );
+
+  let invoked = false;
+  await assert.rejects(
+    deployPreparedPreviewArtifact({
+      outputRoot: '/prepared/.vercel/output',
+      dist: identity.dist,
+      repoConfig: {
+        projects: [
+          { id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' },
+        ],
+      },
+      environment: validEnabledEnvironment,
+      scanOutput: async () => {
+        throw new Error('artifact scan failed');
+      },
+      invoke: async () => {
+        invoked = true;
+      },
+    }),
+    /artifact scan failed/,
+  );
+  assert.equal(invoked, false);
 });
 
 function mockFunction() {

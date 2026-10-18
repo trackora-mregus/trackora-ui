@@ -5,8 +5,7 @@ import process from 'node:process';
 
 import {
   createBrowserBuildEnvironment,
-  createPrebuiltPreviewCommand,
-  scanVercelBuildOutput,
+  deployPreparedPreviewArtifact,
 } from './sentry-build-lib.mjs';
 
 function run(command, args, environment) {
@@ -36,11 +35,15 @@ if (action === 'prepare') {
   console.log('Trusted Preview artifact prepared; no deployment was created.');
 } else {
   const config = JSON.parse(await readFile(path.join(outputRoot, 'config.json'), 'utf8'));
-  await scanVercelBuildOutput({
+  const repoConfig = JSON.parse(
+    await readFile(path.resolve(process.cwd(), '.vercel', 'repo.json'), 'utf8'),
+  );
+  await deployPreparedPreviewArtifact({
     outputRoot,
     dist: config.deploymentId,
-    secretValues: [process.env.SENTRY_AUTH_TOKEN],
+    repoConfig,
+    repositoryDirectory: '.',
+    environment: process.env,
+    invoke: run,
   });
-  const command = createPrebuiltPreviewCommand();
-  await run(command.command, command.args, createBrowserBuildEnvironment(process.env));
 }

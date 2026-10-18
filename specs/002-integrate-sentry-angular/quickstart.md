@@ -6,7 +6,7 @@ This guide applies during later implementation review. It does not authorize cha
 
 - Node.js 22 and locked npm dependencies.
 - Access to a Vercel-authenticated isolated Preview and private `trackora-ui` Sentry project.
-- A trusted local executor, Vercel CLI pinned to `50.4.0` without adding an application dependency, and a least-privilege upload token supplied at execution time by an approved local secret provider.
+- A trusted local executor, Vercel CLI pinned to `64.5.0` without adding an application dependency, a repository link with one unambiguous per-project `orgId` or legacy top-level fallback, and a least-privilege upload token supplied at execution time by an approved local secret provider.
 - Reviewed inputs satisfying [environment-configuration.md](./contracts/environment-configuration.md).
 - No upload token in Git, `.env` files, command arguments, deployment metadata, shared Preview variables, logs, browser output, or `.vercel/output`.
 - No production merge until two distinct preview stages are complete and the synthetic mechanism's absence is verified in the final source tree and generated browser bundles.

@@ -408,12 +408,73 @@ export async function scanVercelBuildOutput({ outputRoot, dist, secretValues = [
   });
 }
 
+function normalizeRepoDirectory(value) {
+  if (value === '' || value === '.') return '.';
+  if (typeof value !== 'string' || path.isAbsolute(value))
+    throw new Error('Vercel repo linkage failed');
+  const normalized = value.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '');
+  if (!normalized || normalized === '..' || normalized.startsWith('../'))
+    throw new Error('Vercel repo linkage failed');
+  return normalized;
+}
+
+export function resolveVercelProjectLink(repoConfig, repositoryDirectory = '.') {
+  if (!isRecord(repoConfig) || !Array.isArray(repoConfig.projects) || !repoConfig.projects.length)
+    throw new Error('Vercel repo linkage failed');
+  const target = normalizeRepoDirectory(repositoryDirectory);
+  const matches = repoConfig.projects
+    .filter(isRecord)
+    .map((project) => ({ ...project, directory: normalizeRepoDirectory(project.directory) }))
+    .filter(
+      (project) =>
+        project.directory === '.' ||
+        target === project.directory ||
+        target.startsWith(`${project.directory}/`),
+    )
+    .sort((left, right) => right.directory.split('/').length - left.directory.split('/').length);
+  if (!matches.length) throw new Error('Vercel repo linkage failed');
+  const deepestDirectory = matches[0].directory;
+  const selected = matches.filter((project) => project.directory === deepestDirectory);
+  if (selected.length !== 1) throw new Error('Vercel repo linkage failed');
+  const project = selected[0];
+  const orgId = project.orgId ?? repoConfig.orgId;
+  if (
+    typeof project.id !== 'string' ||
+    project.id.length === 0 ||
+    typeof orgId !== 'string' ||
+    orgId.length === 0
+  )
+    throw new Error('Vercel repo linkage failed');
+  return { projectId: project.id, orgId, directory: project.directory };
+}
+
 export function createPrebuiltPreviewCommand(extraArguments = []) {
   if (extraArguments.length) throw new Error('Preview-only deployment command rejected');
   return {
     command: 'npx',
-    args: ['--yes', 'vercel@50.4.0', 'deploy', '--prebuilt', '--target=preview'],
+    args: ['--yes', 'vercel@64.5.0', 'deploy', '--prebuilt', '--target=preview'],
   };
+}
+
+export async function deployPreparedPreviewArtifact({
+  outputRoot,
+  dist,
+  repoConfig,
+  repositoryDirectory = '.',
+  environment,
+  scanOutput = scanVercelBuildOutput,
+  invoke,
+}) {
+  if (typeof scanOutput !== 'function' || typeof invoke !== 'function')
+    throw new Error('Prepared Preview deployment failed');
+  resolveVercelProjectLink(repoConfig, repositoryDirectory);
+  await scanOutput({
+    outputRoot,
+    dist,
+    secretValues: [environment?.SENTRY_AUTH_TOKEN],
+  });
+  const command = createPrebuiltPreviewCommand();
+  await invoke(command.command, command.args, createBrowserBuildEnvironment(environment ?? {}));
 }
 
 export async function runEnabledBuildTransaction(actions) {
