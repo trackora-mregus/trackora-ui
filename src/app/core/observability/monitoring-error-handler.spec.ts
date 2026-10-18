@@ -1,8 +1,27 @@
+import 'zone.js';
+
 import { HttpErrorResponse } from '@angular/common/http';
+import {
+  ErrorHandler,
+  provideBrowserGlobalErrorListeners,
+  provideZoneChangeDetection,
+} from '@angular/core';
+import { createApplication } from '@angular/platform-browser';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MonitoringErrorHandler } from './monitoring-error-handler';
 import { MonitoringGateway, type MonitoringSdk } from './monitoring-gateway';
+
+class TestPromiseRejectionEvent extends Event implements PromiseRejectionEvent {
+  readonly promise: Promise<unknown>;
+  readonly reason: unknown;
+
+  constructor(type: string, init: PromiseRejectionEventInit) {
+    super(type, { cancelable: true });
+    this.promise = init.promise;
+    this.reason = init.reason;
+  }
+}
 
 function enabledGateway(): { gateway: MonitoringGateway; sdk: MonitoringSdk } {
   const sdk: MonitoringSdk = {
@@ -58,6 +77,34 @@ describe('MonitoringErrorHandler', () => {
     handler.handleError('primitive rejection');
     expect(consoleError).toHaveBeenCalledWith('ERROR', browserError);
     expect(consoleError).toHaveBeenCalledWith('ERROR', 'primitive rejection');
+    consoleError.mockRestore();
+  });
+
+  it('routes PromiseRejectionEvent through the actual Angular global listener exactly once', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { gateway } = enabledGateway();
+    const shouldCapture = vi.spyOn(gateway, 'shouldCapture');
+    const handler = new MonitoringErrorHandler(gateway);
+    const application = await createApplication({
+      providers: [
+        provideBrowserGlobalErrorListeners(),
+        provideZoneChangeDetection(),
+        { provide: ErrorHandler, useValue: handler },
+      ],
+    });
+    const reason = new Error('browser rejection boundary');
+    const event: PromiseRejectionEvent = new TestPromiseRejectionEvent('unhandledrejection', {
+      reason,
+      promise: Promise.resolve(),
+    });
+
+    window.dispatchEvent(event);
+
+    expect(shouldCapture).toHaveBeenCalledTimes(1);
+    expect(shouldCapture).toHaveBeenCalledWith(reason);
+    expect(consoleError).toHaveBeenCalledWith('ERROR', reason);
+    expect(event.defaultPrevented).toBe(true);
+    application.destroy();
     consoleError.mockRestore();
   });
 });

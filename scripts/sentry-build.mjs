@@ -15,6 +15,7 @@ import {
   runEnabledBuildTransaction,
   scanVercelBuildOutput,
   snapshotSourceMapArtifacts,
+  verifySentryPrivacyControls,
 } from './sentry-build-lib.mjs';
 
 function run(command, args, environment = process.env) {
@@ -43,6 +44,7 @@ if (process.env.TRACKORA_SENTRY_ENABLED !== 'true') {
   const gitIdentity = await deriveCleanGitIdentity(process.cwd());
   const identity = { ...gitIdentity, dist: generateCustomDeploymentId() };
   const plan = createBuildPlan(process.env, identity);
+  await verifySentryPrivacyControls({ authToken: process.env.SENTRY_AUTH_TOKEN });
   const before = await snapshotSourceMapArtifacts(buildRoot);
   let artifactManifest;
   const browserBuildEnvironment = createBrowserBuildEnvironment(process.env);
@@ -82,7 +84,6 @@ if (process.env.TRACKORA_SENTRY_ENABLED !== 'true') {
         outputRoot,
         dist: plan.dist,
         secretValues: [process.env.SENTRY_AUTH_TOKEN],
-        allowVerificationTriggers: process.env.TRACKORA_SENTRY_VERIFICATION_STAGE === 'stage-a',
       }),
   });
   console.log(`Monitoring build state: ${state} (${plan.release}, ${plan.dist})`);

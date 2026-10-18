@@ -11,6 +11,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:build": "node --test scripts/sentry-build.test.mjs",
+    "test:browser-rejection": "node --test scripts/sentry-browser-rejection.test.mjs",
+    "verify:sentry-privacy": "node scripts/sentry-privacy-preflight.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "private": true,

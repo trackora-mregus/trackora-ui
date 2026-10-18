@@ -35,5 +35,8 @@ jobs:
       - name: Build contract tests
         run: npm run test:build
 
+      - name: Native browser rejection test
+        run: npm run test:browser-rejection
+
       - name: Ordinary optimized build
         run: npm run build

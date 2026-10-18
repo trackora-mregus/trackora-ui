@@ -27,9 +27,6 @@ if (!['prepare', 'deploy-preview'].includes(action) || process.argv.length !== 3
 
 const outputRoot = path.resolve(process.cwd(), '.vercel', 'output');
 if (action === 'prepare') {
-  if (!['stage-a', 'stage-b'].includes(process.env.TRACKORA_SENTRY_VERIFICATION_STAGE ?? '')) {
-    throw new Error('Trusted Preview preparation requires explicit stage-a or stage-b');
-  }
   await run(process.execPath, [path.resolve('scripts/sentry-build.mjs')], {
     ...process.env,
     VERCEL_ENV: 'preview',
@@ -43,7 +40,6 @@ if (action === 'prepare') {
     outputRoot,
     dist: config.deploymentId,
     secretValues: [process.env.SENTRY_AUTH_TOKEN],
-    allowVerificationTriggers: process.env.TRACKORA_SENTRY_VERIFICATION_STAGE === 'stage-a',
   });
   const command = createPrebuiltPreviewCommand();
   await run(command.command, command.args, createBrowserBuildEnvironment(process.env));

@@ -88,6 +88,8 @@ The custom ID is generated from 14 cryptographically random bytes before compila
 | `verificationCodeFindings` | Stage A: only reviewed named one-shot cases; Stage B: zero files, symbols, imports, sentinels. |
 | `deploymentCommand`        | Prebuilt with explicit `preview`; production, promotion, and alias operations are invalid.     |
 
+An enabled artifact also has a read-only provider privacy preflight result. It is valid only when the fixed `trackora-ui` project reports project IP scrubbing and explicit `remove anything` applications for `user.geo.city`, `user.geo.country_code`, `user.geo.region`, `user.geo.subdivision`, and `user.geo.subregion`. The build does not mutate those controls, and successful preflight does not replace final normalized-event inspection.
+
 ```text
 CleanCommit -> MapsPresent -> IDsInjected -> UploadSucceeded -> MapsDeleted
                                       \-> UploadFailed ----------------> Blocked
@@ -103,7 +105,7 @@ No bypass entity, credential, approval object, environment variable, or build st
 
 ## SyntheticVerificationCase
 
-Each of the two cases—`synthetic-unexpected-error` and `synthetic-unhandled-rejection`—has a fixed name, `preview` environment, sample rate 1, expected count 1, and a `mechanismPresent` lifecycle. Stage A and Stage B each have a distinct clean commit, custom deployment ID, internal deployment-record ID, Preview URL, and evidence record:
+Each of the two cases—`synthetic-unexpected-error` and `synthetic-unhandled-rejection`—has a fixed name, `preview` environment, sample rate 1, expected count 1, and a `mechanismPresent` lifecycle. The rejection case uses deterministic `PromiseRejectionEvent` dispatch through Angular's existing listener. Fixed payload-free diagnostics record trigger, handler, transport-ready, and accepted/failed transport; accepted rejection transport releases the unexpected-error case so their delivery does not overlap. A separate isolated-browser test proves a naturally unhandled Promise emits the native event. Stage A and Stage B each have a distinct clean commit, custom deployment ID, internal deployment-record ID, Preview URL, and evidence record:
 
 ```text
 Planned -> PreviewDeployed -> TriggeredOnce -> Verified -> Removed -> AbsenceVerified

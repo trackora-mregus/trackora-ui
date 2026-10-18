@@ -19,9 +19,82 @@ const FIXTURE_MARKERS = [
   'CANARY_GPS',
   'CANARY_TELEMETRY',
 ];
+const REQUIRED_GEO_SELECTORS = [
+  '$user.geo.city',
+  '$user.geo.country_code',
+  '$user.geo.region',
+  '$user.geo.subdivision',
+  '$user.geo.subregion',
+];
 
 function preflightFailure() {
   throw new Error('Sentry build preflight failed');
+}
+
+function privacyPreflightFailure() {
+  throw new Error('Sentry privacy preflight failed');
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function validateSentryPrivacyControls(project) {
+  try {
+    if (
+      !project ||
+      project.slug !== 'trackora-ui' ||
+      project.scrubIPAddresses !== true ||
+      typeof project.relayPiiConfig !== 'string'
+    ) {
+      privacyPreflightFailure();
+    }
+    const config = JSON.parse(project.relayPiiConfig);
+    const rules = config?.rules;
+    const applications = config?.applications;
+    if (!isRecord(rules) || !isRecord(applications)) privacyPreflightFailure();
+    for (const selector of REQUIRED_GEO_SELECTORS) {
+      const ruleIds = applications[selector];
+      if (
+        !Array.isArray(ruleIds) ||
+        ruleIds.length === 0 ||
+        !ruleIds.every(
+          (ruleId) =>
+            typeof ruleId === 'string' &&
+            isRecord(rules[ruleId]) &&
+            rules[ruleId].type === 'anything' &&
+            isRecord(rules[ruleId].redaction) &&
+            rules[ruleId].redaction.method === 'remove',
+        )
+      ) {
+        privacyPreflightFailure();
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Sentry privacy preflight failed') throw error;
+    privacyPreflightFailure();
+  }
+}
+
+export async function verifySentryPrivacyControls({ authToken, fetchImpl = globalThis.fetch }) {
+  if (typeof authToken !== 'string' || authToken.length < 1 || typeof fetchImpl !== 'function') {
+    privacyPreflightFailure();
+  }
+  try {
+    const response = await fetchImpl('https://sentry.io/api/0/projects/trackora-o4/trackora-ui/', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      redirect: 'error',
+    });
+    if (!response.ok) privacyPreflightFailure();
+    validateSentryPrivacyControls(await response.json());
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Sentry privacy preflight failed') throw error;
+    privacyPreflightFailure();
+  }
 }
 
 function validDsn(value) {
@@ -296,12 +369,7 @@ export async function packageVercelBuildOutput({
   });
 }
 
-export async function scanVercelBuildOutput({
-  outputRoot,
-  dist,
-  secretValues = [],
-  allowVerificationTriggers = false,
-}) {
+export async function scanVercelBuildOutput({ outputRoot, dist, secretValues = [] }) {
   validateCustomDeploymentId(dist);
   const rootStat = await lstat(outputRoot);
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory())
@@ -335,10 +403,7 @@ export async function scanVercelBuildOutput({
       throw new Error('Build Output scan failed: sensitive-value');
     if (FIXTURE_MARKERS.some((marker) => content.includes(marker)))
       throw new Error('Build Output scan failed: sensitive-fixture');
-    if (
-      !allowVerificationTriggers &&
-      VERIFICATION_MARKERS.some((marker) => file.includes(marker) || content.includes(marker))
-    )
+    if (VERIFICATION_MARKERS.some((marker) => file.includes(marker) || content.includes(marker)))
       throw new Error('Build Output scan failed: verification-trigger');
   });
 }

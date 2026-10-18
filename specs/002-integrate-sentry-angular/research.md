@@ -28,9 +28,9 @@
 
 ## Privacy policy
 
-**Decision**: Explicitly disable every Sentry v11.8 `dataCollection` category (including `userInfo: false`), remove ambient-context integrations, and construct a new event in `beforeSend` from a strict allowlist. Do not add the unsupported `sendDefaultPii` property. Retain only event identity/time, fixed environment/release, minimal verified SDK/platform data, allowlisted exception type, constant-redacted value, sanitized stack coordinates, and debug metadata. Drop on uncertainty or sanitizer failure.
+**Decision**: Explicitly disable every Sentry v11.8 `dataCollection` category (including `userInfo: false`), remove ambient-context integrations, and construct a new event in `beforeSend` from a strict allowlist. Do not add the unsupported `sendDefaultPii` property. Retain only event identity/time, fixed environment/release, minimal verified SDK/platform data, allowlisted exception type, constant-redacted value, sanitized stack coordinates, and debug metadata. Drop on uncertainty or sanitizer failure. Treat the final normalized provider event—not the browser envelope—as the privacy acceptance boundary. Before any enabled monitored build, query the fixed Sentry project read-only and require both project IP scrubbing and explicit pre-storage `remove anything` rules for every `user.geo` field; fail closed without changing provider settings.
 
-**Rationale**: SDK defaults can collect browser context. An allowlist is safer than recursively deleting a denylist and retains only symbolication essentials.
+**Rationale**: SDK defaults can collect browser context. An allowlist is safer than recursively deleting a denylist and retains only symbolication essentials. Stage-A evidence proved that Sentry ingestion can derive normalized geographic context from network metadata even when the serialized browser envelope has no `user` and requests `infer_ip: never`; server-side controls and normalized-event inspection are therefore mandatory defense in depth. IP scrubbing alone is not accepted as proof that derived geographic fields are absent.
 
 **Alternatives considered**: Regex-only redaction cannot prove nested values safe. Original messages, URLs, request context, breadcrumbs, extras, tags, users, frame variables, and source context can all disclose prohibited data.
 

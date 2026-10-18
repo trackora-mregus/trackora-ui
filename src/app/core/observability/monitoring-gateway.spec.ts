@@ -117,4 +117,21 @@ describe('MonitoringGateway', () => {
     expect(stored[0].serialized).toContain('0123456789abcdef0123456789abcdef');
     expect(serializeEnvelopeForAssertion(envelope)).toContain('error');
   });
+
+  it('keeps distinct errors distinct through SDK deduplication and sanitization', async () => {
+    const stored: { serialized: string }[] = [];
+    Sentry.init({
+      ...createSentryOptions(enabled),
+      transport: createInMemoryMonitoringTransport(stored),
+    });
+
+    Sentry.captureException(new Error('first private message'));
+    Sentry.captureException(new Error('second private message'));
+    await Sentry.flush(1_000);
+
+    expect(stored).toHaveLength(2);
+    expect(stored.every(({ serialized }) => serialized.includes('[redacted Error]'))).toBe(true);
+    expect(stored.every(({ serialized }) => !serialized.includes('private message'))).toBe(true);
+    await Sentry.close(1_000);
+  });
 });

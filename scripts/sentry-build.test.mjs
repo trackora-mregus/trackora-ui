@@ -21,6 +21,8 @@ import {
   runEnabledBuildTransaction,
   scanVercelBuildOutput,
   snapshotSourceMapArtifacts,
+  validateSentryPrivacyControls,
+  verifySentryPrivacyControls,
   validateCustomDeploymentId,
 } from './sentry-build-lib.mjs';
 
@@ -44,6 +46,126 @@ const identity = {
   release: `trackora-ui@${'a'.repeat(40)}`,
   dist: 'trk-aaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 };
+
+const geoSelectors = [
+  '$user.geo.city',
+  '$user.geo.country_code',
+  '$user.geo.region',
+  '$user.geo.subdivision',
+  '$user.geo.subregion',
+];
+
+const geoRemovalConfig = JSON.stringify({
+  rules: {
+    removeGeo: { type: 'anything', redaction: { method: 'remove' } },
+  },
+  applications: Object.fromEntries(geoSelectors.map((selector) => [selector, ['removeGeo']])),
+});
+
+const privacyProject = (relayPiiConfig = geoRemovalConfig) => ({
+  slug: 'trackora-ui',
+  scrubIPAddresses: true,
+  relayPiiConfig,
+});
+
+test('Sentry privacy controls accept all five exact $-prefixed remove-anything selectors', () => {
+  assert.doesNotThrow(() => validateSentryPrivacyControls(privacyProject()));
+});
+
+test('Sentry privacy controls fail closed when a required selector is missing', () => {
+  for (const missingSelector of geoSelectors) {
+    const config = JSON.parse(geoRemovalConfig);
+    delete config.applications[missingSelector];
+    assert.throws(
+      () => validateSentryPrivacyControls(privacyProject(JSON.stringify(config))),
+      /privacy preflight failed/,
+    );
+  }
+});
+
+test('Sentry privacy controls reject incorrect redaction methods and data types', () => {
+  for (const rule of [
+    { type: 'anything', redaction: { method: 'mask' } },
+    { type: 'pattern', redaction: { method: 'remove' } },
+  ]) {
+    const config = JSON.parse(geoRemovalConfig);
+    config.rules.removeGeo = rule;
+    assert.throws(
+      () => validateSentryPrivacyControls(privacyProject(JSON.stringify(config))),
+      /privacy preflight failed/,
+    );
+  }
+});
+
+test('Sentry privacy controls reject unexpected or malformed rule structures', () => {
+  const malformedConfigs = [
+    '{',
+    JSON.stringify({ rules: [], applications: {} }),
+    JSON.stringify({ rules: {}, applications: [] }),
+    JSON.stringify({
+      rules: {},
+      applications: Object.fromEntries(geoSelectors.map((s) => [s, []])),
+    }),
+    JSON.stringify({
+      rules: { removeGeo: null },
+      applications: Object.fromEntries(geoSelectors.map((s) => [s, ['removeGeo']])),
+    }),
+    JSON.stringify({
+      rules: { removeGeo: { type: 'anything', redaction: null } },
+      applications: Object.fromEntries(geoSelectors.map((s) => [s, ['removeGeo']])),
+    }),
+    JSON.stringify({
+      rules: { removeGeo: { type: 'anything', redaction: { method: 'remove' } } },
+      applications: Object.fromEntries(geoSelectors.map((s) => [s, 'removeGeo'])),
+    }),
+    JSON.stringify({
+      rules: { removeGeo: { type: 'anything', redaction: { method: 'remove' } } },
+      applications: Object.fromEntries(geoSelectors.map((s) => [s, ['missingRule']])),
+    }),
+  ];
+  for (const relayPiiConfig of malformedConfigs) {
+    assert.throws(
+      () => validateSentryPrivacyControls(privacyProject(relayPiiConfig)),
+      /privacy preflight failed/,
+    );
+  }
+});
+
+test('Sentry privacy controls require the expected project and IP scrubbing', () => {
+  for (const project of [
+    { slug: 'trackora-ui', scrubIPAddresses: false, relayPiiConfig: geoRemovalConfig },
+    { slug: 'trackora-ui', scrubIPAddresses: true, relayPiiConfig: null },
+    { slug: 'another-project', scrubIPAddresses: true, relayPiiConfig: geoRemovalConfig },
+  ]) {
+    assert.throws(() => validateSentryPrivacyControls(project), /privacy preflight failed/);
+  }
+});
+
+test('Sentry privacy preflight is read-only and fails closed on unavailable or malformed responses', async () => {
+  let request;
+  const fetchImpl = async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      json: async () => ({
+        slug: 'trackora-ui',
+        scrubIPAddresses: true,
+        relayPiiConfig: geoRemovalConfig,
+      }),
+    };
+  };
+  await verifySentryPrivacyControls({ authToken: 'private-test-token', fetchImpl });
+  assert.equal(request.url, 'https://sentry.io/api/0/projects/trackora-o4/trackora-ui/');
+  assert.equal(request.options.method, 'GET');
+  assert.equal(request.options.headers.Authorization, 'Bearer private-test-token');
+  await assert.rejects(
+    verifySentryPrivacyControls({
+      authToken: 'private-test-token',
+      fetchImpl: async () => ({ ok: false, status: 403 }),
+    }),
+    /privacy preflight failed/,
+  );
+});
 
 test('ordinary and explicitly disabled builds need no monitoring credentials', () => {
   assert.deepEqual(createBuildPlan({}, identity), { state: 'disabled' });
@@ -379,6 +501,24 @@ test('complete Build Output scan rejects maps, references, secrets, fixtures, tr
         new RegExp(reason).test(error.message) && !error.message.includes('never-written-secret'),
     );
   }
+});
+
+test('complete Build Output scan cannot be configured to allow verification triggers', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trackora-sentry-trigger-'));
+  await writeFile(
+    path.join(root, 'config.json'),
+    JSON.stringify({ version: 3, deploymentId: identity.dist }),
+  );
+  await mkdir(path.join(root, 'static'));
+  await writeFile(path.join(root, 'static', 'main.js'), 'synthetic-unhandled-rejection');
+  await assert.rejects(
+    scanVercelBuildOutput({
+      outputRoot: root,
+      dist: identity.dist,
+      allowVerificationTriggers: true,
+    }),
+    /verification-trigger/,
+  );
 });
 
 test('identity mismatch, packaging failure, and final-scan failure cannot become ready', async () => {
