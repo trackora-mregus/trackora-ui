@@ -4,7 +4,12 @@ import { cp, lstat, mkdir, readFile, readdir, rm, unlink, writeFile } from 'node
 import path from 'node:path';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
+const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const CUSTOM_ID_PATTERN = /^(?!dpl_)[A-Za-z0-9_-]{1,32}$/;
+const EMBEDDED_RELEASE_PATTERN = /trackora-ui@[0-9a-f]{40}/g;
+const EMBEDDED_DIST_PATTERN = /\btrk-[a-f0-9]{28}\b/g;
+const PREPARED_ARTIFACT_METADATA_VERSION = 1;
+const PREPARED_ARTIFACT_METADATA_FILE = 'trackora-sentry-artifact.json';
 const VERIFICATION_MARKERS = [
   'sentry-preview-verification',
   'synthetic-unexpected-error',
@@ -224,6 +229,16 @@ export function createBrowserBuildEnvironment(environment) {
   return result;
 }
 
+function createPrebuiltDeployEnvironment(environment) {
+  const result = createBrowserBuildEnvironment(environment);
+  delete result.TRACKORA_SENTRY_RELEASE;
+  delete result.TRACKORA_SENTRY_DIST;
+  delete result.VERCEL_GIT_COMMIT_SHA;
+  delete result.SENTRY_RELEASE;
+  delete result.SENTRY_DIST;
+  return result;
+}
+
 export function createUploadEnvironment(environment) {
   return {
     ...createBrowserBuildEnvironment(environment),
@@ -408,6 +423,111 @@ export async function scanVercelBuildOutput({ outputRoot, dist, secretValues = [
   });
 }
 
+async function digestBuildOutput(outputRoot) {
+  const files = [];
+  const rootStat = await lstat(outputRoot);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory())
+    throw new Error('Prepared artifact deployment identity failed');
+  await walk(outputRoot, outputRoot, async (file) => files.push(file));
+  files.sort();
+  const digest = createHash('sha256');
+  for (const file of files) {
+    digest.update(path.relative(outputRoot, file).replaceAll(path.sep, '/'));
+    digest.update('\0');
+    digest.update(await readFile(file));
+    digest.update('\0');
+  }
+  return digest.digest('hex');
+}
+
+async function assertEmbeddedBrowserIdentity(outputRoot, identity) {
+  const releases = new Set();
+  const distributions = new Set();
+  const staticRoot = path.join(outputRoot, 'static');
+  const staticStat = await lstat(staticRoot);
+  if (staticStat.isSymbolicLink() || !staticStat.isDirectory())
+    throw new Error('Prepared artifact deployment identity failed');
+  await walk(staticRoot, staticRoot, async (file) => {
+    const content = await readFile(file, 'utf8');
+    for (const release of content.matchAll(EMBEDDED_RELEASE_PATTERN)) releases.add(release[0]);
+    for (const dist of content.matchAll(EMBEDDED_DIST_PATTERN)) distributions.add(dist[0]);
+  });
+  if (
+    releases.size !== 1 ||
+    !releases.has(identity.release) ||
+    distributions.size !== 1 ||
+    !distributions.has(identity.dist)
+  ) {
+    throw new Error('Prepared artifact deployment identity failed');
+  }
+}
+
+function validatePreparedArtifactMetadata(metadata) {
+  const keys = isRecord(metadata) ? Object.keys(metadata).sort() : [];
+  if (
+    !isRecord(metadata) ||
+    JSON.stringify(keys) !==
+      JSON.stringify(['dist', 'outputDigest', 'release', 'sha', 'version']) ||
+    metadata.version !== PREPARED_ARTIFACT_METADATA_VERSION ||
+    !SHA_PATTERN.test(metadata.sha ?? '') ||
+    metadata.release !== `trackora-ui@${metadata.sha}` ||
+    !DIGEST_PATTERN.test(metadata.outputDigest ?? '')
+  ) {
+    throw new Error('Prepared artifact deployment identity failed');
+  }
+  try {
+    validateCustomDeploymentId(metadata.dist);
+  } catch {
+    throw new Error('Prepared artifact deployment identity failed');
+  }
+  return metadata;
+}
+
+function preparedArtifactMetadataPath(repositoryRoot) {
+  return path.join(path.resolve(repositoryRoot), '.vercel', PREPARED_ARTIFACT_METADATA_FILE);
+}
+
+export async function writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity }) {
+  const metadata = validatePreparedArtifactMetadata({
+    version: PREPARED_ARTIFACT_METADATA_VERSION,
+    sha: identity?.sha,
+    release: identity?.release,
+    dist: identity?.dist,
+    outputDigest: await digestBuildOutput(outputRoot),
+  });
+  await assertEmbeddedBrowserIdentity(outputRoot, metadata);
+  await writeFile(
+    preparedArtifactMetadataPath(repositoryRoot),
+    `${JSON.stringify(metadata, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+}
+
+export async function verifyPreparedArtifactDeploymentIdentity({ repositoryRoot, outputRoot }) {
+  try {
+    const gitIdentity = await deriveCleanGitIdentity(repositoryRoot);
+    const metadata = validatePreparedArtifactMetadata(
+      JSON.parse(await readFile(preparedArtifactMetadataPath(repositoryRoot), 'utf8')),
+    );
+    if (metadata.sha !== gitIdentity.sha || metadata.release !== gitIdentity.release)
+      throw new Error('Prepared artifact deployment identity failed');
+    const config = JSON.parse(await readFile(path.join(outputRoot, 'config.json'), 'utf8'));
+    if (
+      config.version !== 3 ||
+      config.deploymentId !== metadata.dist ||
+      (await digestBuildOutput(outputRoot)) !== metadata.outputDigest
+    ) {
+      throw new Error('Prepared artifact deployment identity failed');
+    }
+    await assertEmbeddedBrowserIdentity(outputRoot, metadata);
+    return { sha: metadata.sha, release: metadata.release, dist: metadata.dist };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Prepared artifact deployment identity failed')
+      throw error;
+    throw new Error('Prepared artifact deployment identity failed');
+  }
+}
+
 function normalizeRepoDirectory(value) {
   if (value === '' || value === '.') return '.';
   if (typeof value !== 'string' || path.isAbsolute(value))
@@ -457,8 +577,8 @@ export function createPrebuiltPreviewCommand(extraArguments = []) {
 }
 
 export async function deployPreparedPreviewArtifact({
+  repositoryRoot,
   outputRoot,
-  dist,
   repoConfig,
   repositoryDirectory = '.',
   environment,
@@ -467,14 +587,15 @@ export async function deployPreparedPreviewArtifact({
 }) {
   if (typeof scanOutput !== 'function' || typeof invoke !== 'function')
     throw new Error('Prepared Preview deployment failed');
+  const identity = await verifyPreparedArtifactDeploymentIdentity({ repositoryRoot, outputRoot });
   resolveVercelProjectLink(repoConfig, repositoryDirectory);
   await scanOutput({
     outputRoot,
-    dist,
+    dist: identity.dist,
     secretValues: [environment?.SENTRY_AUTH_TOKEN],
   });
   const command = createPrebuiltPreviewCommand();
-  await invoke(command.command, command.args, createBrowserBuildEnvironment(environment ?? {}));
+  await invoke(command.command, command.args, createPrebuiltDeployEnvironment(environment ?? {}));
 }
 
 export async function runEnabledBuildTransaction(actions) {

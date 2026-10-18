@@ -34,13 +34,12 @@ if (action === 'prepare') {
   });
   console.log('Trusted Preview artifact prepared; no deployment was created.');
 } else {
-  const config = JSON.parse(await readFile(path.join(outputRoot, 'config.json'), 'utf8'));
   const repoConfig = JSON.parse(
     await readFile(path.resolve(process.cwd(), '.vercel', 'repo.json'), 'utf8'),
   );
   await deployPreparedPreviewArtifact({
+    repositoryRoot: process.cwd(),
     outputRoot,
-    dist: config.deploymentId,
     repoConfig,
     repositoryDirectory: '.',
     environment: process.env,

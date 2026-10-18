@@ -23,6 +23,7 @@ import {
   resolveVercelProjectLink,
   scanVercelBuildOutput,
   snapshotSourceMapArtifacts,
+  writePreparedArtifactMetadata,
   validateSentryPrivacyControls,
   verifySentryPrivacyControls,
   validateCustomDeploymentId,
@@ -618,15 +619,52 @@ test('Vercel repo linkage fails closed for missing or ambiguous organization IDs
 });
 
 test('prepared Preview deployment only scans and invokes the pinned CLI', async () => {
+  const repositoryRoot = await mkdtemp(path.join(tmpdir(), 'trackora-sentry-deploy-'));
+  await execFile('git', ['init', '-q'], { cwd: repositoryRoot });
+  await execFile('git', ['config', 'user.email', 'tests@example.invalid'], {
+    cwd: repositoryRoot,
+  });
+  await execFile('git', ['config', 'user.name', 'Tests'], { cwd: repositoryRoot });
+  await writeFile(path.join(repositoryRoot, '.gitignore'), 'browser/\n.vercel/\n');
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'committed');
+  await execFile('git', ['add', '.gitignore', 'tracked.txt'], { cwd: repositoryRoot });
+  await execFile('git', ['commit', '-qm', 'fixture'], { cwd: repositoryRoot });
+  const gitIdentity = await deriveCleanGitIdentity(repositoryRoot);
+  const deploymentIdentity = { ...gitIdentity, dist: identity.dist };
+  const browserOutput = path.join(repositoryRoot, 'browser');
+  const outputRoot = path.join(repositoryRoot, '.vercel', 'output');
+  await mkdir(browserOutput, { recursive: true });
+  await writeFile(
+    path.join(browserOutput, 'main.js'),
+    `globalThis.__SENTRY__=${JSON.stringify({
+      release: deploymentIdentity.release,
+      dist: deploymentIdentity.dist,
+    })}`,
+  );
+  await packageVercelBuildOutput({
+    repositoryRoot,
+    browserOutput,
+    outputRoot,
+    dist: deploymentIdentity.dist,
+  });
+  await writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity: deploymentIdentity });
+
   const calls = [];
   await deployPreparedPreviewArtifact({
-    outputRoot: '/prepared/.vercel/output',
-    dist: identity.dist,
+    repositoryRoot,
+    outputRoot,
     repositoryDirectory: '.',
     repoConfig: {
       projects: [{ id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' }],
     },
-    environment: validEnabledEnvironment,
+    environment: {
+      ...validEnabledEnvironment,
+      VERCEL_GIT_COMMIT_SHA: 'b'.repeat(40),
+      TRACKORA_SENTRY_RELEASE: `trackora-ui@${'b'.repeat(40)}`,
+      TRACKORA_SENTRY_DIST: 'trk-bbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      SENTRY_RELEASE: `trackora-ui@${'b'.repeat(40)}`,
+      SENTRY_DIST: 'trk-bbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    },
     scanOutput: async (options) => {
       calls.push({ action: 'scan', options });
     },
@@ -648,6 +686,11 @@ test('prepared Preview deployment only scans and invokes the pinned CLI', async 
     '--target=preview',
   ]);
   assert.equal(calls[1].environment.SENTRY_AUTH_TOKEN, undefined);
+  assert.equal(calls[1].environment.VERCEL_GIT_COMMIT_SHA, undefined);
+  assert.equal(calls[1].environment.TRACKORA_SENTRY_RELEASE, undefined);
+  assert.equal(calls[1].environment.TRACKORA_SENTRY_DIST, undefined);
+  assert.equal(calls[1].environment.SENTRY_RELEASE, undefined);
+  assert.equal(calls[1].environment.SENTRY_DIST, undefined);
   assert.equal(
     calls.some(({ action }) => ['build', 'generate-id', 'upload-maps'].includes(action)),
     false,
@@ -656,8 +699,8 @@ test('prepared Preview deployment only scans and invokes the pinned CLI', async 
   let invoked = false;
   await assert.rejects(
     deployPreparedPreviewArtifact({
-      outputRoot: '/prepared/.vercel/output',
-      dist: identity.dist,
+      repositoryRoot,
+      outputRoot,
       repoConfig: {
         projects: [
           { id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' },
@@ -674,6 +717,216 @@ test('prepared Preview deployment only scans and invokes the pinned CLI', async 
     /artifact scan failed/,
   );
   assert.equal(invoked, false);
+
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'dirty');
+  await assert.rejects(
+    deployPreparedPreviewArtifact({
+      repositoryRoot,
+      outputRoot,
+      repoConfig: {
+        projects: [
+          { id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' },
+        ],
+      },
+      environment: validEnabledEnvironment,
+      invoke: async () => assert.fail('dirty repository must not deploy'),
+    }),
+    /deployment identity failed/,
+  );
+});
+
+test('prepared Preview deployment rejects an artifact from an ancestor commit', async () => {
+  const repositoryRoot = await mkdtemp(path.join(tmpdir(), 'trackora-sentry-stale-'));
+  await execFile('git', ['init', '-q'], { cwd: repositoryRoot });
+  await execFile('git', ['config', 'user.email', 'tests@example.invalid'], {
+    cwd: repositoryRoot,
+  });
+  await execFile('git', ['config', 'user.name', 'Tests'], { cwd: repositoryRoot });
+  await writeFile(path.join(repositoryRoot, '.gitignore'), 'browser/\n.vercel/\n');
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'first');
+  await execFile('git', ['add', '.gitignore', 'tracked.txt'], { cwd: repositoryRoot });
+  await execFile('git', ['commit', '-qm', 'first'], { cwd: repositoryRoot });
+  const preparedIdentity = {
+    ...(await deriveCleanGitIdentity(repositoryRoot)),
+    dist: identity.dist,
+  };
+  const browserOutput = path.join(repositoryRoot, 'browser');
+  const outputRoot = path.join(repositoryRoot, '.vercel', 'output');
+  await mkdir(browserOutput, { recursive: true });
+  await writeFile(
+    path.join(browserOutput, 'main.js'),
+    `${preparedIdentity.release}\n${preparedIdentity.dist}`,
+  );
+  await packageVercelBuildOutput({
+    repositoryRoot,
+    browserOutput,
+    outputRoot,
+    dist: preparedIdentity.dist,
+  });
+  await writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity: preparedIdentity });
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'second');
+  await execFile('git', ['add', 'tracked.txt'], { cwd: repositoryRoot });
+  await execFile('git', ['commit', '-qm', 'second'], { cwd: repositoryRoot });
+
+  await assert.rejects(
+    deployPreparedPreviewArtifact({
+      repositoryRoot,
+      outputRoot,
+      repoConfig: {
+        projects: [
+          { id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' },
+        ],
+      },
+      environment: validEnabledEnvironment,
+      invoke: async () => assert.fail('stale artifact must not deploy'),
+    }),
+    /deployment identity failed/,
+  );
+});
+
+test('prepared Preview deployment rejects unrelated, malformed, and mismatched identities', async () => {
+  const repositoryRoot = await mkdtemp(path.join(tmpdir(), 'trackora-sentry-invalid-'));
+  await execFile('git', ['init', '-q'], { cwd: repositoryRoot });
+  await execFile('git', ['config', 'user.email', 'tests@example.invalid'], {
+    cwd: repositoryRoot,
+  });
+  await execFile('git', ['config', 'user.name', 'Tests'], { cwd: repositoryRoot });
+  await writeFile(path.join(repositoryRoot, '.gitignore'), 'browser/\n.vercel/\n');
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'committed');
+  await execFile('git', ['add', '.gitignore', 'tracked.txt'], { cwd: repositoryRoot });
+  await execFile('git', ['commit', '-qm', 'fixture'], { cwd: repositoryRoot });
+  const actualIdentity = await deriveCleanGitIdentity(repositoryRoot);
+  const outputRoot = path.join(repositoryRoot, '.vercel', 'output');
+  const browserOutput = path.join(repositoryRoot, 'browser');
+  await mkdir(browserOutput, { recursive: true });
+  const repoConfig = {
+    projects: [{ id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' }],
+  };
+  const invoke = async () => assert.fail('invalid artifact must not deploy');
+
+  for (const artifactIdentity of [
+    { sha: 'b'.repeat(40), release: `trackora-ui@${'b'.repeat(40)}`, dist: identity.dist },
+  ]) {
+    await writeFile(
+      path.join(browserOutput, 'main.js'),
+      `${artifactIdentity.release}\n${artifactIdentity.dist}`,
+    );
+    await packageVercelBuildOutput({
+      repositoryRoot,
+      browserOutput,
+      outputRoot,
+      dist: artifactIdentity.dist,
+    });
+    await writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity: artifactIdentity });
+    await assert.rejects(
+      deployPreparedPreviewArtifact({
+        repositoryRoot,
+        outputRoot,
+        repoConfig,
+        environment: validEnabledEnvironment,
+        invoke,
+      }),
+      /deployment identity failed/,
+    );
+  }
+
+  const matchingIdentity = { ...actualIdentity, dist: identity.dist };
+  await writeFile(
+    path.join(browserOutput, 'main.js'),
+    `${matchingIdentity.release}\n${matchingIdentity.dist}`,
+  );
+  await packageVercelBuildOutput({
+    repositoryRoot,
+    browserOutput,
+    outputRoot,
+    dist: matchingIdentity.dist,
+  });
+  await writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity: matchingIdentity });
+  const metadataPath = path.join(repositoryRoot, '.vercel', 'trackora-sentry-artifact.json');
+  const malformedMetadata = JSON.parse(await readFile(metadataPath, 'utf8'));
+  malformedMetadata.sha = 'not-a-sha';
+  malformedMetadata.release = 'trackora-ui@not-a-sha';
+  await writeFile(metadataPath, JSON.stringify(malformedMetadata));
+  await assert.rejects(
+    deployPreparedPreviewArtifact({
+      repositoryRoot,
+      outputRoot,
+      repoConfig,
+      environment: validEnabledEnvironment,
+      invoke,
+    }),
+    /deployment identity failed/,
+  );
+
+  await writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity: matchingIdentity });
+  const configPath = path.join(outputRoot, 'config.json');
+  const config = JSON.parse(await readFile(configPath, 'utf8'));
+  config.deploymentId = 'trk-bbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  await writeFile(configPath, JSON.stringify(config));
+  await assert.rejects(
+    deployPreparedPreviewArtifact({
+      repositoryRoot,
+      outputRoot,
+      repoConfig,
+      environment: validEnabledEnvironment,
+      invoke,
+    }),
+    /deployment identity failed/,
+  );
+});
+
+test('caller-supplied release variables cannot spoof a stale prepared artifact', async () => {
+  const repositoryRoot = await mkdtemp(path.join(tmpdir(), 'trackora-sentry-spoof-'));
+  await execFile('git', ['init', '-q'], { cwd: repositoryRoot });
+  await execFile('git', ['config', 'user.email', 'tests@example.invalid'], {
+    cwd: repositoryRoot,
+  });
+  await execFile('git', ['config', 'user.name', 'Tests'], { cwd: repositoryRoot });
+  await writeFile(path.join(repositoryRoot, '.gitignore'), 'browser/\n.vercel/\n');
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'first');
+  await execFile('git', ['add', '.gitignore', 'tracked.txt'], { cwd: repositoryRoot });
+  await execFile('git', ['commit', '-qm', 'first'], { cwd: repositoryRoot });
+  const preparedIdentity = {
+    ...(await deriveCleanGitIdentity(repositoryRoot)),
+    dist: identity.dist,
+  };
+  const browserOutput = path.join(repositoryRoot, 'browser');
+  const outputRoot = path.join(repositoryRoot, '.vercel', 'output');
+  await mkdir(browserOutput, { recursive: true });
+  await writeFile(
+    path.join(browserOutput, 'main.js'),
+    `${preparedIdentity.release}\n${preparedIdentity.dist}`,
+  );
+  await packageVercelBuildOutput({
+    repositoryRoot,
+    browserOutput,
+    outputRoot,
+    dist: preparedIdentity.dist,
+  });
+  await writePreparedArtifactMetadata({ repositoryRoot, outputRoot, identity: preparedIdentity });
+  await writeFile(path.join(repositoryRoot, 'tracked.txt'), 'second');
+  await execFile('git', ['add', 'tracked.txt'], { cwd: repositoryRoot });
+  await execFile('git', ['commit', '-qm', 'second'], { cwd: repositoryRoot });
+
+  await assert.rejects(
+    deployPreparedPreviewArtifact({
+      repositoryRoot,
+      outputRoot,
+      repoConfig: {
+        projects: [
+          { id: 'prj_current', name: 'trackora-ui', directory: '.', orgId: 'team_current' },
+        ],
+      },
+      environment: {
+        ...validEnabledEnvironment,
+        VERCEL_GIT_COMMIT_SHA: preparedIdentity.sha,
+        TRACKORA_SENTRY_RELEASE: preparedIdentity.release,
+        TRACKORA_SENTRY_DIST: preparedIdentity.dist,
+      },
+      invoke: async () => assert.fail('spoofed artifact must not deploy'),
+    }),
+    /deployment identity failed/,
+  );
 });
 
 function mockFunction() {

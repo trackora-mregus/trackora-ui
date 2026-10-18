@@ -16,6 +16,7 @@ import {
   scanVercelBuildOutput,
   snapshotSourceMapArtifacts,
   verifySentryPrivacyControls,
+  writePreparedArtifactMetadata,
 } from './sentry-build-lib.mjs';
 
 function run(command, args, environment = process.env) {
@@ -72,13 +73,15 @@ if (process.env.TRACKORA_SENTRY_ENABLED !== 'true') {
       run(sentryCli, [...plan.uploadArguments, ...artifactManifest.files], uploadEnvironment),
     cleanup: () => cleanupGeneratedSourceMaps(buildRoot, before),
     assertClean: () => assertNoPublicSourceMaps(buildRoot),
-    packageOutput: () =>
-      packageVercelBuildOutput({
+    packageOutput: async () => {
+      await packageVercelBuildOutput({
         repositoryRoot: process.cwd(),
         browserOutput,
         outputRoot,
         dist: plan.dist,
-      }),
+      });
+      await writePreparedArtifactMetadata({ repositoryRoot: process.cwd(), outputRoot, identity });
+    },
     scanOutput: () =>
       scanVercelBuildOutput({
         outputRoot,
