@@ -1,4 +1,5 @@
-import { Component, computed, signal } from '@angular/core';
+import { PILOT_PRESENTATION } from './core/config/pilot-presentation';
+import { Component, inject, computed, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
@@ -38,6 +39,7 @@ import {AppNotification} from './shared/models/notification.models';
   styleUrl: './app.css'
 })
 export class App {
+  readonly pilotPresentation = inject(PILOT_PRESENTATION);
   protected readonly title = signal('fleetwise-ui');
 
   searchQuery = '';
@@ -66,6 +68,7 @@ export class App {
   }
 
   ngOnInit(): void {
+    if (this.pilotPresentation) return;
     const fleetId = this.fleetContextService.selectedFleetId();
     this.appNotificationService.refresh();
 
@@ -75,6 +78,7 @@ export class App {
   }
 
   openAlert(alert: Alert): void {
+    if (this.pilotPresentation) return;
     if (alert.vehicleId) {
       this.router.navigate(['/vehicles', alert.vehicleId]);
       return;
@@ -94,6 +98,7 @@ export class App {
   }
 
   onSearchChange(query: string): void {
+    if (this.pilotPresentation) return;
     this.searchQuery = query;
 
     if (query.trim().length < 2) {
@@ -114,6 +119,7 @@ export class App {
   }
 
   openSearchAlert(): void {
+    if (this.pilotPresentation) return;
     this.searchOpen = false;
     this.searchQuery = '';
     this.searchResults = null;
@@ -140,6 +146,7 @@ export class App {
   }
 
   openNotification(notification: AppNotification): void {
+    if (this.pilotPresentation) return;
     this.appNotificationService.markAsRead(notification.id);
 
     const type = String(notification.type ?? '').trim().toUpperCase();

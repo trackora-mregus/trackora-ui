@@ -1,4 +1,5 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe, CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -70,6 +71,7 @@ import {FleetTelematicsLocation} from '../../../shared/models/fleet-map.models';
   styleUrl: './vehicle-details.component.css'
 })
 export class VehicleDetailsComponent implements OnInit {
+  readonly pilotPresentation = inject(PILOT_PRESENTATION);
   loading = signal(false);
   errorMessage = signal<string | null>(null);
   vehicle = signal<Vehicle | null>(null);
@@ -193,6 +195,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadLatestTelematics(vehicleId: string): void {
+    if (this.pilotPresentation) return;
     this.telematicsService.getCurrentVehicleState(vehicleId).subscribe({
       next: data => {
         // console.log('Latest vehicle telematics:', data);
@@ -255,6 +258,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadFuelLogs(vehicleId: string): void {
+    if (this.pilotPresentation) return;
     this.fuelService.getVehicleFuelLogs(vehicleId).subscribe({
       next: logs => {
         this.fuelLogs.set(logs);
@@ -267,6 +271,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadAlerts(vehicle: Vehicle): void {
+    if (this.pilotPresentation) return;
     this.alertService.getFleetAlerts(vehicle.fleetId).subscribe({
       next: alerts => {
         this.alerts.set(
@@ -281,6 +286,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   resolveAlert(alert: Alert): void {
+    if (this.pilotPresentation) return;
     this.alertService.resolveAlert(alert.id).subscribe({
       next: updated => {
         this.alerts.update(current =>
@@ -296,6 +302,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadLatestVehicleInsight(vehicleId: string): void {
+    if (this.pilotPresentation) return;
     this.aiInsightService.getLatestVehicleInsight(vehicleId).subscribe({
       next: insight => {
         this.latestInsight.set(insight);
@@ -308,6 +315,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadOlderInsights(): void {
+    if (this.pilotPresentation) return;
     const vehicle = this.vehicle();
 
     if (!vehicle) {
@@ -338,6 +346,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   generateAiInsight(): void {
+    if (this.pilotPresentation) return;
     const vehicle = this.vehicle();
 
     if (!vehicle) {
@@ -368,6 +377,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   updateVehicleStatus(status: VehicleStatus): void {
+    if (this.pilotPresentation) return;
     const vehicle = this.vehicle();
 
     if (!vehicle) {
@@ -421,6 +431,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   startEditVehicle(): void {
+    if (this.pilotPresentation) return;
     const vehicle = this.vehicle();
 
     if (!vehicle) {
@@ -441,6 +452,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   saveVehicleChanges(): void {
+    if (this.pilotPresentation) return;
     const vehicle = this.vehicle();
 
     if (!vehicle || this.vehicleForm.invalid) {
@@ -575,6 +587,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   deleteDocument(document: VehicleDocument): void {
+    if (this.pilotPresentation) return;
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '420px',
       data: {

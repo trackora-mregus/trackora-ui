@@ -27,6 +27,7 @@
         {{ v.status }}
       </span>
 
+            @if (!pilotPresentation) {
             <div class="status-buttons">
               <button
                 mat-stroked-button
@@ -67,6 +68,7 @@
                 Mark Sold
               </button>
             </div>
+            }
           </div>
     </header>
 
@@ -104,14 +106,14 @@
       <div class="edit-card-header">
         <mat-card-title>Vehicle Assignment</mat-card-title>
 
-        @if (!editingVehicle()) {
+        @if (!pilotPresentation && !editingVehicle()) {
           <button mat-stroked-button color="primary" type="button" (click)="startEditVehicle()">
             Edit Vehicle
           </button>
         }
       </div>
 
-      @if (editingVehicle()) {
+      @if (!pilotPresentation && editingVehicle()) {
         <form [formGroup]="vehicleForm" class="vehicle-edit-form" (ngSubmit)="saveVehicleChanges()">
           <mat-form-field appearance="outline">
             <mat-label>Fleet</mat-label>
@@ -274,6 +276,7 @@
           </div>
         </mat-tab>
 
+        @if (!pilotPresentation) {
         <mat-tab label="Fuel">
           <div class="tab-content">
             @if (fuelLogs().length > 0) {
@@ -388,6 +391,8 @@
             }
           </div>
         </mat-tab>
+
+        }
 
 <!--        <mat-tab label="AI Insights">-->
 <!--          <div class="tab-content">-->
@@ -568,6 +573,7 @@
                       Download
                     </button>
 
+                    @if (!pilotPresentation) {
                     <button
                       mat-button
                       color="warn"
@@ -576,6 +582,7 @@
                     >
                       Delete
                     </button>
+                    }
                   </td>
                 </ng-container>
 
@@ -591,8 +598,9 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Telematics">
+        <mat-tab [label]="pilotPresentation ? 'Assigned Device' : 'Telematics'">
           <section class="tab-content">
+            @if (!pilotPresentation) {
             <mat-card class="telematics-card">
               <mat-card-header>
                 <mat-card-title>Live Telematics</mat-card-title>
@@ -674,6 +682,8 @@
               </mat-card-content>
             </mat-card>
 
+            }
+
             <mat-card class="device-card">
               <mat-card-header>
                 <mat-card-title>Device Status</mat-card-title>
@@ -716,6 +726,7 @@
           </section>
         </mat-tab>
 
+        @if (!pilotPresentation) {
         <mat-tab label="Map">
           <ng-template matTabContent>
             @if (vehicle(); as currentVehicle) {
@@ -728,6 +739,7 @@
             }
           </ng-template>
         </mat-tab>
+        }
       </mat-tab-group>
     </mat-card>
   }

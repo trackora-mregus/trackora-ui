@@ -1,9 +1,12 @@
 import { Routes } from '@angular/router';
+import { pilotFeatureGuard } from './core/guards/pilot-feature.guard';
 import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {
     path: '',
+    pathMatch: 'full',
+    canMatch: [pilotFeatureGuard],
     loadComponent: () =>
       import('./features/welcome/welcome/welcome.component')
         .then(m => m.WelcomeComponent)
@@ -28,6 +31,7 @@ export const routes: Routes = [
   },
   {
     path: 'dashboard',
+    canMatch: [pilotFeatureGuard],
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/dashboard/dashboard/dashboard.component')
@@ -49,6 +53,7 @@ export const routes: Routes = [
   },
   {
     path: 'fleets',
+    canMatch: [pilotFeatureGuard],
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/fleets/fleets/fleets.component')
@@ -56,6 +61,7 @@ export const routes: Routes = [
   },
   {
     path: 'maintenance',
+    canMatch: [pilotFeatureGuard],
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/maintenance/maintenance/maintenance.component')
@@ -63,6 +69,7 @@ export const routes: Routes = [
   },
   {
     path: 'fuel',
+    canMatch: [pilotFeatureGuard],
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/fuel/fuel/fuel.component')
@@ -70,6 +77,7 @@ export const routes: Routes = [
   },
   {
     path: 'alerts',
+    canMatch: [pilotFeatureGuard],
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/alerts/alerts/alerts.component')
@@ -77,6 +85,7 @@ export const routes: Routes = [
   },
   {
     path: 'admin/geometris-packets',
+    canMatch: [pilotFeatureGuard],
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/telematics/telematics/geometris-packets/geometris-packets')
@@ -84,24 +93,28 @@ export const routes: Routes = [
   },
   {
     path: 'fleets/:fleetId/map',
+    canMatch: [pilotFeatureGuard],
     loadComponent: () =>
       import('./features/telematics/telematics/fleet-map/fleet-map')
         .then(m => m.FleetMapComponent)
   },
   {
     path: 'admin/servicebus/deadletters',
+    canMatch: [pilotFeatureGuard],
     loadComponent: () =>
       import('./features/telematics/telematics/servicebus-deadletters/servicebus-deadletters.component')
         .then(m => m.ServicebusDeadlettersComponent)
   },
   {
     path: 'fleets/:fleetId/safety',
+    canMatch: [pilotFeatureGuard],
     loadComponent: () =>
       import('./features/safety/safety/safety-dashboard/safety-dashboard.component')
         .then(m => m.SafetyDashboardComponent)
   },
   {
     path: 'fleets/:fleetId/copilot',
+    canMatch: [pilotFeatureGuard],
     loadComponent: () =>
       import('./features/copilot/copilot/fleet-copilot/fleet-copilot.component')
         .then(m => m.FleetCopilotComponent)

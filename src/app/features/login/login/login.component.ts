@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {Router, RouterLink} from '@angular/router';
@@ -28,6 +29,7 @@ import { AuthService } from '../../../core/auth/auth.service';
   styleUrl: './login.component.css'
 })
 export class LoginComponent {
+  readonly pilotPresentation = inject(PILOT_PRESENTATION);
   loading = signal(false);
   errorMessage = signal<string | null>(null);
 
@@ -56,7 +58,7 @@ export class LoginComponent {
     this.authService.login(this.form.getRawValue()).subscribe({
       next: () => {
         this.loading.set(false);
-        this.router.navigate(['/dashboard']);
+        this.router.navigate([this.pilotPresentation ? '/vehicles' : '/dashboard']);
       },
       error: () => {
         this.loading.set(false);

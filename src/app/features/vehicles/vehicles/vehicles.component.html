@@ -2,7 +2,7 @@
   <header class="vehicles-header">
     <div>
       <h1>Vehicles</h1>
-      <p>View and add vehicles by fleet.</p>
+      <p>{{ pilotPresentation ? 'View vehicles and documents by fleet.' : 'View and add vehicles by fleet.' }}</p>
     </div>
 
     <div class="header-actions">
@@ -32,6 +32,7 @@
     </mat-card>
   }
 
+  @if (!pilotPresentation) {
   <mat-card class="create-card">
     <mat-card-title>Add Vehicle</mat-card-title>
 
@@ -114,6 +115,8 @@
       </form>
     </mat-card-content>
   </mat-card>
+
+  }
 
   @if (loading()) {
     <div class="loading">
