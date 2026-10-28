@@ -1,4 +1,5 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -42,6 +43,7 @@ import {NotificationService} from '../../../core/services/notification.service';
   styleUrl: './vehicles.component.css'
 })
 export class VehiclesComponent implements OnInit {
+  readonly pilotPresentation = inject(PILOT_PRESENTATION);
   loading = signal(false);
   saving = signal(false);
   errorMessage = signal<string | null>(null);
@@ -153,6 +155,7 @@ export class VehiclesComponent implements OnInit {
   }
 
   createVehicle(): void {
+    if (this.pilotPresentation) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -204,10 +207,11 @@ export class VehiclesComponent implements OnInit {
 
     this.loadVehicles(fleetId);
     this.fleetContextService.setSelectedFleetId(fleetId);
-    this.alertContextService.loadOpenAlertCount(fleetId);
+    if (!this.pilotPresentation) this.alertContextService.loadOpenAlertCount(fleetId);
   }
 
   decodeVin(): void {
+    if (this.pilotPresentation) return;
     const vin = this.form.controls.vin.value?.trim();
 
     if (!vin) {
