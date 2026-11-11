@@ -26,4 +26,20 @@ describe('ConfirmDialogComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should close the dialog exactly once with true on confirm', () => {
+    const close = vi.spyOn(TestBed.inject(MatDialogRef), 'close');
+
+    component.confirm();
+
+    expect(close).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it('should close the dialog exactly once with false on cancel', () => {
+    const close = vi.spyOn(TestBed.inject(MatDialogRef), 'close');
+
+    component.cancel();
+
+    expect(close).toHaveBeenCalledExactlyOnceWith(false);
+  });
 });
