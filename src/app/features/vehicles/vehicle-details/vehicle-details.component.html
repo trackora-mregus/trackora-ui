@@ -231,6 +231,26 @@
 
                   <td mat-cell *matCellDef="let record">
                     <div class="maintenance-documents">
+                      @if (pilotPresentation) {
+                        @if (pilotMaintenanceDocuments.rows()[record.id]; as row) {
+                          <button mat-stroked-button type="button"
+                            (click)="pilotMaintenanceDocuments.load(record.id, true)"
+                            [disabled]="row.phase === 'loading' || row.uploading"
+                            [attr.aria-label]="'Load documents for maintenance ' + record.id">
+                            {{ row.phase === 'loading' ? 'Loading documents...' : row.phase === 'error' ? 'Retry documents' : row.listed ? 'Refresh documents' : 'Load documents' }}
+                          </button>
+                          <span role="status" aria-live="polite">
+                            @switch (row.phase) {
+                              @case ('idle') { Documents not loaded. }
+                              @case ('loading') { Loading documents... }
+                              @case ('empty') { No documents found. }
+                              @case ('success') { Documents loaded. }
+                              @case ('error') { Document list unavailable. }
+                            }
+                            {{ row.message }}
+                          </span>
+                        }
+                      }
                       <input
                         #maintenanceDocInput
                         type="file"
@@ -243,7 +263,7 @@
                         color="primary"
                         type="button"
                         (click)="maintenanceDocInput.click()"
-                        [disabled]="uploadingMaintenanceDocument() === record.id"
+                        [disabled]="pilotPresentation ? uploadingMaintenanceDocument() !== null || pilotMaintenanceDocuments.rows()[record.id]?.phase === 'loading' : uploadingMaintenanceDocument() === record.id"
                       >
                         @if (uploadingMaintenanceDocument() === record.id) {
                           Uploading...

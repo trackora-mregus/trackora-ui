@@ -1,5 +1,9 @@
+import { PilotMaintenanceDocuments } from '../../../core/services/pilot-maintenance-documents.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map, Observable, Subject, takeUntil } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe, CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -50,6 +54,7 @@ import {FleetTelematicsLocation} from '../../../shared/models/fleet-map.models';
 @Component({
   selector: 'app-vehicle-details',
   standalone: true,
+  providers: [PilotMaintenanceDocuments],
   imports: [
     CommonModule,
     DatePipe,
@@ -72,6 +77,9 @@ import {FleetTelematicsLocation} from '../../../shared/models/fleet-map.models';
 })
 export class VehicleDetailsComponent implements OnInit {
   readonly pilotPresentation = inject(PILOT_PRESENTATION);
+  readonly pilotMaintenanceDocuments = inject(PilotMaintenanceDocuments);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly vehicleScope = new Subject<void>();
   loading = signal(false);
   errorMessage = signal<string | null>(null);
   vehicle = signal<Vehicle | null>(null);
@@ -93,8 +101,12 @@ export class VehicleDetailsComponent implements OnInit {
   fleets = signal<Fleet[]>([]);
   documents = signal<VehicleDocument[]>([]);
   uploadingDocument = signal(false);
-  maintenanceDocuments = signal<Record<string, VehicleDocument[]>>({});
-  uploadingMaintenanceDocument = signal<string | null>(null);
+  private readonly nonpilotMaintenanceDocuments = signal<Record<string, VehicleDocument[]>>({});
+  private readonly nonpilotUploadingMaintenanceDocument = signal<string | null>(null);
+  readonly maintenanceDocuments = computed(() => this.pilotPresentation
+    ? this.pilotMaintenanceDocuments.documents() : this.nonpilotMaintenanceDocuments());
+  readonly uploadingMaintenanceDocument = computed(() => this.pilotPresentation
+    ? this.pilotMaintenanceDocuments.uploadingId() : this.nonpilotUploadingMaintenanceDocument());
   selectedDocumentType = signal('GENERAL');
   latestTelematics = signal<FleetTelematicsLocation | null>(null);
   device = signal<TelematicsDevice | null>(null);
@@ -173,6 +185,20 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.pilotPresentation && this.route.paramMap) {
+      this.route.paramMap.pipe(
+        map(params => params.get('vehicleId')),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      ).subscribe(vehicleId => {
+        if (vehicleId) this.loadVehicle(vehicleId);
+        else {
+          this.resetPilotVehicle('');
+          this.errorMessage.set('Vehicle ID is missing.');
+        }
+      });
+      return;
+    }
     const vehicleId = this.route.snapshot.paramMap.get('vehicleId');
 
     if (!vehicleId) {
@@ -184,7 +210,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadTelematicsDevice(vehicleId: string): void {
-    this.telematicsService.getDevicesForVehicle(vehicleId).subscribe({
+    this.vehicleRequest(this.telematicsService.getDevicesForVehicle(vehicleId)).subscribe({
       next: devices => {
         this.device.set(devices[0] ?? null);
       },
@@ -213,10 +239,11 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadVehicle(vehicleId: string): void {
+    if (this.pilotPresentation) this.resetPilotVehicle(vehicleId);
     this.loading.set(true);
     this.errorMessage.set(null);
 
-    this.vehicleService.getVehicle(vehicleId).subscribe({
+    this.vehicleRequest(this.vehicleService.getVehicle(vehicleId)).subscribe({
       next: vehicle => {
         this.vehicle.set(vehicle);
 
@@ -245,7 +272,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadMaintenance(vehicleId: string): void {
-    this.maintenanceService.getVehicleMaintenance(vehicleId).subscribe({
+    this.vehicleRequest(this.maintenanceService.getVehicleMaintenance(vehicleId)).subscribe({
       next: records => {
         this.maintenanceRecords.set(records);
         this.loadMaintenanceDocuments(records);
@@ -413,7 +440,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadFleets(): void {
-    this.fleetService.getMyFleets().subscribe({
+    this.vehicleRequest(this.fleetService.getMyFleets()).subscribe({
       next: fleets => this.fleets.set(fleets),
       error: err => {
         // this.errorMessage.set('Unable to load fleets.')
@@ -496,7 +523,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadDocuments(vehicleId: string): void {
-    this.vehicleDocumentService.getVehicleDocuments(vehicleId).subscribe({
+    this.vehicleRequest(this.vehicleDocumentService.getVehicleDocuments(vehicleId)).subscribe({
       next: documents => {
         this.documents.set(documents);
         // this.notificationService.success('Vehicle status updated successfully.');
@@ -540,11 +567,11 @@ export class VehicleDetailsComponent implements OnInit {
     this.uploadingDocument.set(true);
     this.errorMessage.set(null);
 
-    this.vehicleDocumentService.uploadDocument(
+    this.vehicleRequest(this.vehicleDocumentService.uploadDocument(
       vehicle.id,
       file,
       this.selectedDocumentType()
-    ).subscribe({
+    )).subscribe({
       next: document => {
         this.documents.update(current => [document, ...current]);
         this.uploadingDocument.set(false);
@@ -560,7 +587,7 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   downloadDocument(document: VehicleDocument): void {
-    this.vehicleDocumentService.downloadDocument(document.id).subscribe({
+    this.vehicleRequest(this.vehicleDocumentService.downloadDocument(document.id)).subscribe({
       next: response => {
         const blob = response.body;
 
@@ -653,10 +680,14 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadMaintenanceDocuments(records: MaintenanceRecord[]): void {
+    if (this.pilotPresentation) {
+      this.pilotMaintenanceDocuments.register(records);
+      return;
+    }
     records.forEach(record => {
       this.vehicleDocumentService.getMaintenanceDocuments(record.id).subscribe({
         next: docs => {
-          this.maintenanceDocuments.update(current => ({
+          this.nonpilotMaintenanceDocuments.update(current => ({
             ...current,
             [record.id]: docs
           }));
@@ -680,7 +711,18 @@ export class VehicleDetailsComponent implements OnInit {
       return;
     }
 
-    this.uploadingMaintenanceDocument.set(record.id);
+    if (this.pilotPresentation) {
+      this.pilotMaintenanceDocuments.upload(record.id, file, () => {
+        input.value = '';
+        this.notificationService.success('Maintenance document uploaded.');
+      }, error => {
+        this.notificationService.error(error instanceof HttpErrorResponse
+          ? error.error?.message ?? 'Unable to upload maintenance document.'
+          : 'Unable to upload maintenance document.');
+      });
+      return;
+    }
+    this.nonpilotUploadingMaintenanceDocument.set(record.id);
 
     this.vehicleDocumentService.uploadMaintenanceDocument(
       record.id,
@@ -688,21 +730,38 @@ export class VehicleDetailsComponent implements OnInit {
       'MAINTENANCE_INVOICE'
     ).subscribe({
       next: doc => {
-        this.maintenanceDocuments.update(current => ({
+        this.nonpilotMaintenanceDocuments.update(current => ({
           ...current,
           [record.id]: [doc, ...(current[record.id] ?? [])]
         }));
 
-        this.uploadingMaintenanceDocument.set(null);
+        this.nonpilotUploadingMaintenanceDocument.set(null);
         input.value = '';
         this.notificationService.success('Maintenance document uploaded.');
       },
       error: err => {
-        this.uploadingMaintenanceDocument.set(null);
+        this.nonpilotUploadingMaintenanceDocument.set(null);
         // this.errorMessage.set('Unable to upload maintenance document.');
         this.notificationService.error(err?.error?.message ?? 'Unable to upload maintenance document.');
       }
     });
+  }
+
+  private vehicleRequest<T>(request: Observable<T>): Observable<T> {
+    return this.pilotPresentation
+      ? request.pipe(takeUntil(this.vehicleScope), takeUntilDestroyed(this.destroyRef))
+      : request;
+  }
+
+  private resetPilotVehicle(vehicleId: string): void {
+    this.vehicleScope.next();
+    this.pilotMaintenanceDocuments.selectVehicle(vehicleId);
+    this.vehicle.set(null);
+    this.maintenanceRecords.set([]);
+    this.documents.set([]);
+    this.device.set(null);
+    this.uploadingDocument.set(false);
+    this.loading.set(false);
   }
 
   getDeviceStatus(): 'ONLINE' | 'STALE' | 'OFFLINE' {
