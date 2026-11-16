@@ -67,7 +67,9 @@ describe('pilot login', () => {
       .expectOne(`${environment.apiBaseUrl}/auth/login`)
       .flush({}, { status: 401, statusText: 'Unauthorized' });
     expect(component.loading()).toBe(false);
-    expect(component.errorMessage()).toBe('Invalid email or password.');
+    expect(component.errorMessage()).toBe(
+      'Sign-in was not accepted. Check your details or contact support.',
+    );
     expect(navigate).not.toHaveBeenCalled();
   });
 });

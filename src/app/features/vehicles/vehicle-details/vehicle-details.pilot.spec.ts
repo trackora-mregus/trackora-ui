@@ -261,13 +261,17 @@ describe('pilot vehicle detail', () => {
       .expectOne(`${api}/vehicles/${vehicle.id}/documents`)
       .flush({}, { status: 403, statusText: 'Forbidden' });
     expect(component.uploadingDocument()).toBe(false);
-    expect(notifications.error).toHaveBeenCalledWith('Unable to upload document.');
+    expect(component.uploadError()).toContain('You do not have permission');
+    expect(notifications.error).not.toHaveBeenCalled();
     component.onMaintenanceDocumentSelected(fileEvent(new File(['test'], 'synthetic.txt')), record);
     controller
       .expectOne(`${api}/maintenance/${record.id}/documents`)
       .flush({}, { status: 413, statusText: 'Too large' });
     expect(component.uploadingMaintenanceDocument()).toBeNull();
-    expect(notifications.error).toHaveBeenCalledWith('Unable to upload maintenance document.');
+    expect(component.pilotMaintenanceDocuments.rows()[record.id].message).toContain(
+      'The file exceeds the upload size limit.',
+    );
+    expect(notifications.error).not.toHaveBeenCalled();
     component.loadDocuments(vehicle.id);
     controller
       .expectOne(`${api}/vehicles/${vehicle.id}/documents`)

@@ -7,6 +7,10 @@
     </div>
   }
 
+  @if (uploadError()) {
+    <mat-card class="error-card" role="alert">{{ uploadError() }}</mat-card>
+  }
+
   @if (errorMessage()) {
     <mat-card class="error-card">
       {{ errorMessage() }}
@@ -284,7 +288,7 @@
                           pilotPresentation
                             ? uploadingMaintenanceDocument() !== null ||
                               pilotMaintenanceDocuments.rows()[record.id]?.phase === 'loading'
-                            : uploadingMaintenanceDocument() === record.id
+                            : uploadingMaintenanceDocument() !== null
                         "
                       >
                         @if (uploadingMaintenanceDocument() === record.id) {
