@@ -1,5 +1,9 @@
+import { PilotMaintenanceDocuments } from '../../../core/services/pilot-maintenance-documents.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map, Observable, Subject, takeUntil } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe, CurrencyPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -41,15 +45,16 @@ import { VehicleDocument } from '../../../shared/models/vehicle-document.models'
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
-import {NotificationService} from '../../../core/services/notification.service';
-import {TelematicsDevice, TelematicsEvent} from '../../../shared/models/telematics.models';
-import {TelematicsService} from '../../../core/services/telematics.service';
-import {VehicleMapComponent} from './vehicle-map/vehicle-map.component';
-import {FleetTelematicsLocation} from '../../../shared/models/fleet-map.models';
+import { NotificationService } from '../../../core/services/notification.service';
+import { TelematicsDevice, TelematicsEvent } from '../../../shared/models/telematics.models';
+import { TelematicsService } from '../../../core/services/telematics.service';
+import { VehicleMapComponent } from './vehicle-map/vehicle-map.component';
+import { FleetTelematicsLocation } from '../../../shared/models/fleet-map.models';
 
 @Component({
   selector: 'app-vehicle-details',
   standalone: true,
+  providers: [PilotMaintenanceDocuments],
   imports: [
     CommonModule,
     DatePipe,
@@ -65,13 +70,16 @@ import {FleetTelematicsLocation} from '../../../shared/models/fleet-map.models';
     MatInputModule,
     MatSelectModule,
     MatSnackBarModule,
-    VehicleMapComponent
+    VehicleMapComponent,
   ],
   templateUrl: './vehicle-details.component.html',
-  styleUrl: './vehicle-details.component.css'
+  styleUrl: './vehicle-details.component.css',
 })
 export class VehicleDetailsComponent implements OnInit {
   readonly pilotPresentation = inject(PILOT_PRESENTATION);
+  readonly pilotMaintenanceDocuments = inject(PilotMaintenanceDocuments);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly vehicleScope = new Subject<void>();
   loading = signal(false);
   errorMessage = signal<string | null>(null);
   vehicle = signal<Vehicle | null>(null);
@@ -93,8 +101,18 @@ export class VehicleDetailsComponent implements OnInit {
   fleets = signal<Fleet[]>([]);
   documents = signal<VehicleDocument[]>([]);
   uploadingDocument = signal(false);
-  maintenanceDocuments = signal<Record<string, VehicleDocument[]>>({});
-  uploadingMaintenanceDocument = signal<string | null>(null);
+  private readonly nonpilotMaintenanceDocuments = signal<Record<string, VehicleDocument[]>>({});
+  private readonly nonpilotUploadingMaintenanceDocument = signal<string | null>(null);
+  readonly maintenanceDocuments = computed(() =>
+    this.pilotPresentation
+      ? this.pilotMaintenanceDocuments.documents()
+      : this.nonpilotMaintenanceDocuments(),
+  );
+  readonly uploadingMaintenanceDocument = computed(() =>
+    this.pilotPresentation
+      ? this.pilotMaintenanceDocuments.uploadingId()
+      : this.nonpilotUploadingMaintenanceDocument(),
+  );
   selectedDocumentType = signal('GENERAL');
   latestTelematics = signal<FleetTelematicsLocation | null>(null);
   device = signal<TelematicsDevice | null>(null);
@@ -107,7 +125,7 @@ export class VehicleDetailsComponent implements OnInit {
     'MAINTENANCE_INVOICE',
     'FUEL_RECEIPT',
     'PHOTO',
-    'OTHER'
+    'OTHER',
   ];
 
   readonly maxUploadSizeBytes = 10 * 1024 * 1024;
@@ -121,32 +139,14 @@ export class VehicleDetailsComponent implements OnInit {
     'cost',
     'vendor',
     'status',
-    'documents'
+    'documents',
   ];
 
-  fuelColumns = [
-    'fuelDate',
-    'mileage',
-    'gallons',
-    'totalCost',
-    'pricePerGallon'
-  ];
+  fuelColumns = ['fuelDate', 'mileage', 'gallons', 'totalCost', 'pricePerGallon'];
 
-  alertColumns = [
-    'type',
-    'message',
-    'createdAt',
-    'status',
-    'actions'
-  ];
+  alertColumns = ['type', 'message', 'createdAt', 'status', 'actions'];
 
-  documentColumns = [
-    'fileName',
-    'documentType',
-    'fileSize',
-    'createdAt',
-    'actions'
-  ];
+  documentColumns = ['fileName', 'documentType', 'fileSize', 'createdAt', 'actions'];
 
   constructor(
     private notificationService: NotificationService,
@@ -163,16 +163,32 @@ export class VehicleDetailsComponent implements OnInit {
     private alertContextService: AlertContextService,
     private vehicleDocumentService: VehicleDocumentService,
     private dialog: MatDialog,
-    private telematicsService: TelematicsService
+    private telematicsService: TelematicsService,
   ) {
     this.vehicleForm = this.fb.nonNullable.group({
       fleetId: ['', [Validators.required]],
       licensePlate: [''],
-      currentMileage: [0, [Validators.required, Validators.min(0)]]
+      currentMileage: [0, [Validators.required, Validators.min(0)]],
     });
   }
 
   ngOnInit(): void {
+    if (this.pilotPresentation && this.route.paramMap) {
+      this.route.paramMap
+        .pipe(
+          map((params) => params.get('vehicleId')),
+          distinctUntilChanged(),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe((vehicleId) => {
+          if (vehicleId) this.loadVehicle(vehicleId);
+          else {
+            this.resetPilotVehicle('');
+            this.errorMessage.set('Vehicle ID is missing.');
+          }
+        });
+      return;
+    }
     const vehicleId = this.route.snapshot.paramMap.get('vehicleId');
 
     if (!vehicleId) {
@@ -184,27 +200,27 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadTelematicsDevice(vehicleId: string): void {
-    this.telematicsService.getDevicesForVehicle(vehicleId).subscribe({
-      next: devices => {
+    this.vehicleRequest(this.telematicsService.getDevicesForVehicle(vehicleId)).subscribe({
+      next: (devices) => {
         this.device.set(devices[0] ?? null);
       },
       error: () => {
         this.device.set(null);
-      }
+      },
     });
   }
 
   loadLatestTelematics(vehicleId: string): void {
     if (this.pilotPresentation) return;
     this.telematicsService.getCurrentVehicleState(vehicleId).subscribe({
-      next: data => {
+      next: (data) => {
         // console.log('Latest vehicle telematics:', data);
-        this.latestTelematics.set(data)
+        this.latestTelematics.set(data);
       },
-      error: err => {
+      error: (err) => {
         // console.error('Latest telematics failed:', err);
-        this.latestTelematics.set(null)
-      }
+        this.latestTelematics.set(null);
+      },
     });
   }
 
@@ -213,11 +229,12 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadVehicle(vehicleId: string): void {
+    if (this.pilotPresentation) this.resetPilotVehicle(vehicleId);
     this.loading.set(true);
     this.errorMessage.set(null);
 
-    this.vehicleService.getVehicle(vehicleId).subscribe({
-      next: vehicle => {
+    this.vehicleRequest(this.vehicleService.getVehicle(vehicleId)).subscribe({
+      next: (vehicle) => {
         this.vehicle.set(vehicle);
 
         this.loadMaintenance(vehicle.id);
@@ -232,11 +249,11 @@ export class VehicleDetailsComponent implements OnInit {
 
         this.loading.set(false);
       },
-      error: err => {
+      error: (err) => {
         this.loading.set(false);
         // this.errorMessage.set('Unable to load vehicle.');
         this.notificationService.error(err?.error?.message ?? 'Unable to load vehicle.');
-      }
+      },
     });
   }
 
@@ -245,72 +262,74 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   loadMaintenance(vehicleId: string): void {
-    this.maintenanceService.getVehicleMaintenance(vehicleId).subscribe({
-      next: records => {
+    this.vehicleRequest(this.maintenanceService.getVehicleMaintenance(vehicleId)).subscribe({
+      next: (records) => {
         this.maintenanceRecords.set(records);
         this.loadMaintenanceDocuments(records);
       },
-      error: err => {
+      error: (err) => {
         this.errorMessage.set('Unable to load maintenance history.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to load maintenance history.');
-      }
+        this.notificationService.error(
+          err?.error?.message ?? 'Unable to load maintenance history.',
+        );
+      },
     });
   }
 
   loadFuelLogs(vehicleId: string): void {
     if (this.pilotPresentation) return;
     this.fuelService.getVehicleFuelLogs(vehicleId).subscribe({
-      next: logs => {
+      next: (logs) => {
         this.fuelLogs.set(logs);
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to load fuel history.');
         this.notificationService.error(err?.error?.message ?? 'Unable to load fuel history.');
-      }
+      },
     });
   }
 
   loadAlerts(vehicle: Vehicle): void {
     if (this.pilotPresentation) return;
     this.alertService.getFleetAlerts(vehicle.fleetId).subscribe({
-      next: alerts => {
-        this.alerts.set(
-          alerts.filter(alert => alert.vehicleId === vehicle.id)
-        );
+      next: (alerts) => {
+        this.alerts.set(alerts.filter((alert) => alert.vehicleId === vehicle.id));
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to load alerts.');
         this.notificationService.error(err?.error?.message ?? 'Unable to load alerts.');
-      }
+      },
     });
   }
 
   resolveAlert(alert: Alert): void {
     if (this.pilotPresentation) return;
     this.alertService.resolveAlert(alert.id).subscribe({
-      next: updated => {
-        this.alerts.update(current =>
-          current.map(item => item.id === updated.id ? updated : item)
+      next: (updated) => {
+        this.alerts.update((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
         );
         this.notificationService.success('Alert resolved successfully.');
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to resolve alert.');
         this.notificationService.error(err?.error?.message ?? 'Unable to resolve alert.');
-      }
+      },
     });
   }
 
   loadLatestVehicleInsight(vehicleId: string): void {
     if (this.pilotPresentation) return;
     this.aiInsightService.getLatestVehicleInsight(vehicleId).subscribe({
-      next: insight => {
+      next: (insight) => {
         this.latestInsight.set(insight);
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to load latest vehicle AI insight.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to load latest vehicle AI insight.');
-      }
+        this.notificationService.error(
+          err?.error?.message ?? 'Unable to load latest vehicle AI insight.',
+        );
+      },
     });
   }
 
@@ -326,22 +345,22 @@ export class VehicleDetailsComponent implements OnInit {
     this.errorMessage.set(null);
 
     this.aiInsightService.getVehicleInsights(vehicle.id).subscribe({
-      next: insights => {
+      next: (insights) => {
         const latestId = this.latestInsight()?.id;
 
-        this.olderInsights.set(
-          insights.filter(insight => insight.id !== latestId)
-        );
+        this.olderInsights.set(insights.filter((insight) => insight.id !== latestId));
 
         this.showOlderInsights.set(true);
         this.loadingOlderInsights.set(false);
         this.notificationService.success('Vehicle Insight has been loaded successfully.');
       },
-      error: err => {
+      error: (err) => {
         this.loadingOlderInsights.set(false);
         // this.errorMessage.set('Unable to load older AI insights.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to load older vehicle AI insight.');
-      }
+        this.notificationService.error(
+          err?.error?.message ?? 'Unable to load older vehicle AI insight.',
+        );
+      },
     });
   }
 
@@ -356,24 +375,28 @@ export class VehicleDetailsComponent implements OnInit {
     this.generatingInsight.set(true);
     this.errorMessage.set(null);
 
-    this.aiInsightService.generateVehicleSummary(vehicle.id, {
-      timeframe: 'Last 30 days',
-      includeFuelStats: true,
-      includeMaintenanceStats: true
-    }).subscribe({
-      next: insight => {
-        this.latestInsight.set(insight);
-        this.olderInsights.set([]);
-        this.showOlderInsights.set(false);
-        this.generatingInsight.set(false);
-        this.notificationService.success('Vehicle AI insight generated successfully.');
-      },
-      error: err => {
-        this.generatingInsight.set(false);
-        // this.errorMessage.set('Unable to generate vehicle AI insight.');
-        this.notificationService.error(err?.error?.message ?? 'Vehicle AI insight only available once a day.');
-      }
-    });
+    this.aiInsightService
+      .generateVehicleSummary(vehicle.id, {
+        timeframe: 'Last 30 days',
+        includeFuelStats: true,
+        includeMaintenanceStats: true,
+      })
+      .subscribe({
+        next: (insight) => {
+          this.latestInsight.set(insight);
+          this.olderInsights.set([]);
+          this.showOlderInsights.set(false);
+          this.generatingInsight.set(false);
+          this.notificationService.success('Vehicle AI insight generated successfully.');
+        },
+        error: (err) => {
+          this.generatingInsight.set(false);
+          // this.errorMessage.set('Unable to generate vehicle AI insight.');
+          this.notificationService.error(
+            err?.error?.message ?? 'Vehicle AI insight only available once a day.',
+          );
+        },
+      });
   }
 
   updateVehicleStatus(status: VehicleStatus): void {
@@ -395,30 +418,30 @@ export class VehicleDetailsComponent implements OnInit {
       licensePlate: vehicle.licensePlate,
       currentMileage: vehicle.currentMileage,
       status,
-      fleetId: vehicle.fleetId
+      fleetId: vehicle.fleetId,
     };
 
     this.vehicleService.updateVehicle(vehicle.id, request).subscribe({
-      next: updated => {
+      next: (updated) => {
         this.vehicle.set(updated);
         this.updatingStatus.set(false);
         // this.notificationService.success('Vehicle status updated successfully.');
       },
-      error: err => {
+      error: (err) => {
         this.updatingStatus.set(false);
         // this.errorMessage.set('Unable to update vehicle status.');
         this.notificationService.error(err?.error?.message ?? 'Unable to update vehicle status.');
-      }
+      },
     });
   }
 
   loadFleets(): void {
-    this.fleetService.getMyFleets().subscribe({
-      next: fleets => this.fleets.set(fleets),
-      error: err => {
+    this.vehicleRequest(this.fleetService.getMyFleets()).subscribe({
+      next: (fleets) => this.fleets.set(fleets),
+      error: (err) => {
         // this.errorMessage.set('Unable to load fleets.')
         this.notificationService.error(err?.error?.message ?? 'Unable to load fleets.');
-      }
+      },
     });
   }
 
@@ -426,7 +449,7 @@ export class VehicleDetailsComponent implements OnInit {
     this.vehicleForm.patchValue({
       fleetId: vehicle.fleetId,
       licensePlate: vehicle.licensePlate || '',
-      currentMileage: vehicle.currentMileage || 0
+      currentMileage: vehicle.currentMileage || 0,
     });
   }
 
@@ -473,11 +496,11 @@ export class VehicleDetailsComponent implements OnInit {
       licensePlate: raw.licensePlate,
       currentMileage: raw.currentMileage,
       status: vehicle.status,
-      fleetId: raw.fleetId
+      fleetId: raw.fleetId,
     };
 
     this.vehicleService.updateVehicle(vehicle.id, request).subscribe({
-      next: updated => {
+      next: (updated) => {
         this.vehicle.set(updated);
         this.patchVehicleForm(updated);
         this.editingVehicle.set(false);
@@ -487,24 +510,24 @@ export class VehicleDetailsComponent implements OnInit {
         this.alertContextService.loadOpenAlertCount(updated.fleetId);
         this.notificationService.success('Vehicle updated successfully.');
       },
-      error: err => {
+      error: (err) => {
         this.savingVehicle.set(false);
         // this.errorMessage.set('Unable to update vehicle.');
         this.notificationService.error(err?.error?.message ?? 'Unable to update vehicle.');
-      }
+      },
     });
   }
 
   loadDocuments(vehicleId: string): void {
-    this.vehicleDocumentService.getVehicleDocuments(vehicleId).subscribe({
-      next: documents => {
+    this.vehicleRequest(this.vehicleDocumentService.getVehicleDocuments(vehicleId)).subscribe({
+      next: (documents) => {
         this.documents.set(documents);
         // this.notificationService.success('Vehicle status updated successfully.');
       },
-      error: err => {
+      error: (err) => {
         this.errorMessage.set('Unable to load documents.');
         this.notificationService.error(err?.error?.message ?? 'Unable to update vehicle status.');
-      }
+      },
     });
   }
 
@@ -540,28 +563,26 @@ export class VehicleDetailsComponent implements OnInit {
     this.uploadingDocument.set(true);
     this.errorMessage.set(null);
 
-    this.vehicleDocumentService.uploadDocument(
-      vehicle.id,
-      file,
-      this.selectedDocumentType()
+    this.vehicleRequest(
+      this.vehicleDocumentService.uploadDocument(vehicle.id, file, this.selectedDocumentType()),
     ).subscribe({
-      next: document => {
-        this.documents.update(current => [document, ...current]);
+      next: (document) => {
+        this.documents.update((current) => [document, ...current]);
         this.uploadingDocument.set(false);
         input.value = '';
         this.notificationService.success('Document uploaded successfully.');
       },
-      error: err => {
+      error: (err) => {
         this.uploadingDocument.set(false);
         // this.errorMessage.set('Unable to upload document.');
         this.notificationService.error(err?.error?.message ?? 'Unable to upload document.');
-      }
+      },
     });
   }
 
   downloadDocument(document: VehicleDocument): void {
-    this.vehicleDocumentService.downloadDocument(document.id).subscribe({
-      next: response => {
+    this.vehicleRequest(this.vehicleDocumentService.downloadDocument(document.id)).subscribe({
+      next: (response) => {
         const blob = response.body;
 
         if (!blob) {
@@ -579,10 +600,10 @@ export class VehicleDetailsComponent implements OnInit {
         window.URL.revokeObjectURL(url);
         this.notificationService.success('Document downloaded successfully.');
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to download document.');
         this.notificationService.error(err?.error?.message ?? 'Unable to download document.');
-      }
+      },
     });
   }
 
@@ -594,26 +615,24 @@ export class VehicleDetailsComponent implements OnInit {
         title: 'Delete Document',
         message: `Are you sure you want to delete "${document.originalFileName}"?`,
         confirmText: 'Delete',
-        cancelText: 'Cancel'
-      }
+        cancelText: 'Cancel',
+      },
     });
 
-    dialogRef.afterClosed().subscribe(confirmed => {
+    dialogRef.afterClosed().subscribe((confirmed) => {
       if (!confirmed) {
         return;
       }
 
       this.vehicleDocumentService.deleteDocument(document.id).subscribe({
         next: () => {
-          this.documents.update(current =>
-            current.filter(item => item.id !== document.id)
-          );
+          this.documents.update((current) => current.filter((item) => item.id !== document.id));
           this.notificationService.success('Document deleted successfully.');
         },
-        error: err => {
+        error: (err) => {
           // this.errorMessage.set('Unable to delete document.');
           this.notificationService.error(err?.error?.message ?? 'Unable to delete document.');
-        }
+        },
       });
     });
   }
@@ -631,36 +650,31 @@ export class VehicleDetailsComponent implements OnInit {
   }
 
   private isImageFile(file: File): boolean {
-    const allowedMimeTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'image/gif'
-    ];
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-    const allowedExtensions = [
-      '.jpg',
-      '.jpeg',
-      '.png',
-      '.webp',
-      '.gif'
-    ];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 
     const fileName = file.name.toLowerCase();
 
-    return allowedMimeTypes.includes(file.type)
-      || allowedExtensions.some(extension => fileName.endsWith(extension));
+    return (
+      allowedMimeTypes.includes(file.type) ||
+      allowedExtensions.some((extension) => fileName.endsWith(extension))
+    );
   }
 
   loadMaintenanceDocuments(records: MaintenanceRecord[]): void {
-    records.forEach(record => {
+    if (this.pilotPresentation) {
+      this.pilotMaintenanceDocuments.register(records);
+      return;
+    }
+    records.forEach((record) => {
       this.vehicleDocumentService.getMaintenanceDocuments(record.id).subscribe({
-        next: docs => {
-          this.maintenanceDocuments.update(current => ({
+        next: (docs) => {
+          this.nonpilotMaintenanceDocuments.update((current) => ({
             ...current,
-            [record.id]: docs
+            [record.id]: docs,
           }));
-        }
+        },
       });
     });
   }
@@ -680,29 +694,64 @@ export class VehicleDetailsComponent implements OnInit {
       return;
     }
 
-    this.uploadingMaintenanceDocument.set(record.id);
+    if (this.pilotPresentation) {
+      this.pilotMaintenanceDocuments.upload(
+        record.id,
+        file,
+        () => {
+          input.value = '';
+          this.notificationService.success('Maintenance document uploaded.');
+        },
+        (error) => {
+          this.notificationService.error(
+            error instanceof HttpErrorResponse
+              ? (error.error?.message ?? 'Unable to upload maintenance document.')
+              : 'Unable to upload maintenance document.',
+          );
+        },
+      );
+      return;
+    }
+    this.nonpilotUploadingMaintenanceDocument.set(record.id);
 
-    this.vehicleDocumentService.uploadMaintenanceDocument(
-      record.id,
-      file,
-      'MAINTENANCE_INVOICE'
-    ).subscribe({
-      next: doc => {
-        this.maintenanceDocuments.update(current => ({
-          ...current,
-          [record.id]: [doc, ...(current[record.id] ?? [])]
-        }));
+    this.vehicleDocumentService
+      .uploadMaintenanceDocument(record.id, file, 'MAINTENANCE_INVOICE')
+      .subscribe({
+        next: (doc) => {
+          this.nonpilotMaintenanceDocuments.update((current) => ({
+            ...current,
+            [record.id]: [doc, ...(current[record.id] ?? [])],
+          }));
 
-        this.uploadingMaintenanceDocument.set(null);
-        input.value = '';
-        this.notificationService.success('Maintenance document uploaded.');
-      },
-      error: err => {
-        this.uploadingMaintenanceDocument.set(null);
-        // this.errorMessage.set('Unable to upload maintenance document.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to upload maintenance document.');
-      }
-    });
+          this.nonpilotUploadingMaintenanceDocument.set(null);
+          input.value = '';
+          this.notificationService.success('Maintenance document uploaded.');
+        },
+        error: (err) => {
+          this.nonpilotUploadingMaintenanceDocument.set(null);
+          // this.errorMessage.set('Unable to upload maintenance document.');
+          this.notificationService.error(
+            err?.error?.message ?? 'Unable to upload maintenance document.',
+          );
+        },
+      });
+  }
+
+  private vehicleRequest<T>(request: Observable<T>): Observable<T> {
+    return this.pilotPresentation
+      ? request.pipe(takeUntil(this.vehicleScope), takeUntilDestroyed(this.destroyRef))
+      : request;
+  }
+
+  private resetPilotVehicle(vehicleId: string): void {
+    this.vehicleScope.next();
+    this.pilotMaintenanceDocuments.selectVehicle(vehicleId);
+    this.vehicle.set(null);
+    this.maintenanceRecords.set([]);
+    this.documents.set([]);
+    this.device.set(null);
+    this.uploadingDocument.set(false);
+    this.loading.set(false);
   }
 
   getDeviceStatus(): 'ONLINE' | 'STALE' | 'OFFLINE' {

@@ -99,9 +99,13 @@ describe('pilot vehicle detail', () => {
     controller
       .expectOne({ method: 'GET', url: `${api}/vehicles/${vehicle.id}/maintenance` })
       .flush([record]);
-    controller
-      .expectOne({ method: 'GET', url: `${api}/maintenance/${record.id}/documents` })
-      .flush([doc]);
+    if (pilot) {
+      controller.expectNone(`${api}/maintenance/${record.id}/documents`);
+    } else {
+      controller
+        .expectOne({ method: 'GET', url: `${api}/maintenance/${record.id}/documents` })
+        .flush([doc]);
+    }
     controller.expectOne({ method: 'GET', url: `${api}/fleets` }).flush([]);
     controller
       .expectOne({ method: 'GET', url: `${api}/vehicles/${vehicle.id}/documents` })
