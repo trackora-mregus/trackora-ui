@@ -310,7 +310,9 @@ describe('pilot maintenance document policy', () => {
       .expectOne(`${api}/maintenance/a/documents`)
       .flush(null, { status: 429, statusText: 'Limit' });
     expect(store.rows()['a'].documents).toEqual([doc]);
-    expect(store.rows()['a'].message).toBe('Unable to upload maintenance document.');
+    expect(store.rows()['a'].message).toBe(
+      'The request was limited. Wait before trying again. Select the file again if you choose to retry.',
+    );
     expect(failure).toHaveBeenCalledOnce();
     expect(store.uploadingId()).toBeNull();
     now = 11_000;

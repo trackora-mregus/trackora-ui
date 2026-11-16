@@ -1,7 +1,10 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize, Subject, takeUntil } from 'rxjs';
+import { classifyHttpFailure, failureText } from '../../../core/http/http-failure';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
+import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { MatCardModule } from '@angular/material/card';
@@ -22,14 +25,14 @@ import { Vehicle } from '../../../shared/models/vehicle.models';
 import {
   MaintenanceRecord,
   MaintenanceStatus,
-  ServiceType
+  ServiceType,
 } from '../../../shared/models/maintenance.models';
-import {AlertContextService} from '../../../core/services/alert-context.service';
-import {VehicleDocument} from '../../../shared/models/vehicle-document.models';
-import {VehicleDocumentService} from '../../../core/services/vehicle-document.service';
+import { AlertContextService } from '../../../core/services/alert-context.service';
+import { VehicleDocument } from '../../../shared/models/vehicle-document.models';
+import { VehicleDocumentService } from '../../../core/services/vehicle-document.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
-import {NotificationService} from '../../../core/services/notification.service';
+import { NotificationService } from '../../../core/services/notification.service';
 
 @Component({
   selector: 'app-maintenance',
@@ -47,16 +50,20 @@ import {NotificationService} from '../../../core/services/notification.service';
     MatButtonModule,
     MatInputModule,
     MatPaginator,
-    MatSnackBarModule
+    MatSnackBarModule,
   ],
   templateUrl: './maintenance.component.html',
-  styleUrl: './maintenance.component.css'
+  styleUrl: './maintenance.component.css',
 })
 export class MaintenanceComponent implements OnInit {
   readonly maxUploadSizeBytes = 10 * 1024 * 1024;
   loading = signal(false);
   saving = signal(false);
   errorMessage = signal<string | null>(null);
+  uploadError = signal<string | null>(null);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly uploadScope = new Subject<void>();
+  private uploadRetryAt = new Map<string, number>();
 
   fleets = signal<Fleet[]>([]);
   vehicles = signal<Vehicle[]>([]);
@@ -79,14 +86,10 @@ export class MaintenanceComponent implements OnInit {
     'TRANSMISSION',
     'INSPECTION',
     'REPAIR',
-    'OTHER'
+    'OTHER',
   ];
 
-  statuses: MaintenanceStatus[] = [
-    'SCHEDULED',
-    'COMPLETED',
-    'CANCELLED'
-  ];
+  statuses: MaintenanceStatus[] = ['SCHEDULED', 'COMPLETED', 'CANCELLED'];
 
   displayedColumns = [
     'serviceType',
@@ -96,7 +99,7 @@ export class MaintenanceComponent implements OnInit {
     'vendor',
     'status',
     'documents',
-    'actions'
+    'actions',
   ];
 
   form;
@@ -110,7 +113,7 @@ export class MaintenanceComponent implements OnInit {
     private maintenanceService: MaintenanceService,
     private alertContextService: AlertContextService,
     private vehicleDocumentService: VehicleDocumentService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
   ) {
     this.form = this.fb.nonNullable.group({
       serviceType: ['OIL_CHANGE' as ServiceType, [Validators.required]],
@@ -120,7 +123,7 @@ export class MaintenanceComponent implements OnInit {
       cost: [0, [Validators.required, Validators.min(0)]],
       vendor: [''],
       nextServiceDate: [''],
-      status: ['COMPLETED' as MaintenanceStatus, [Validators.required]]
+      status: ['COMPLETED' as MaintenanceStatus, [Validators.required]],
     });
   }
 
@@ -144,7 +147,7 @@ export class MaintenanceComponent implements OnInit {
     this.errorMessage.set(null);
 
     this.fleetService.getMyFleets().subscribe({
-      next: fleets => {
+      next: (fleets) => {
         this.fleets.set(fleets);
 
         if (fleets.length === 0) {
@@ -154,23 +157,24 @@ export class MaintenanceComponent implements OnInit {
         }
 
         const savedFleetId = this.fleetContextService.selectedFleetId();
-        const selectedFleet =
-          fleets.find(fleet => fleet.id === savedFleetId) ?? fleets[0];
+        const selectedFleet = fleets.find((fleet) => fleet.id === savedFleetId) ?? fleets[0];
 
         this.selectedFleetId.set(selectedFleet.id);
         this.fleetContextService.setSelectedFleetId(selectedFleet.id);
 
         this.loadVehicles(selectedFleet.id);
       },
-      error: err => {
+      error: (err) => {
         this.loading.set(false);
         // this.errorMessage.set('Unable to load fleets.');
         this.notificationService.error(err?.error?.message ?? 'Unable to load fleets.');
-      }
+      },
     });
   }
 
   onFleetChange(fleetId: string): void {
+    this.uploadScope.next();
+    this.uploadError.set(null);
     this.selectedFleetId.set(fleetId);
     this.fleetContextService.setSelectedFleetId(fleetId);
     this.selectedVehicleId.set(null);
@@ -183,7 +187,7 @@ export class MaintenanceComponent implements OnInit {
     this.errorMessage.set(null);
 
     this.vehicleService.getFleetVehicles(fleetId).subscribe({
-      next: vehicles => {
+      next: (vehicles) => {
         this.vehicles.set(vehicles);
 
         if (vehicles.length === 0) {
@@ -197,18 +201,20 @@ export class MaintenanceComponent implements OnInit {
         this.patchMileage(firstVehicle);
         this.loadMaintenance(firstVehicle.id);
       },
-      error: err => {
+      error: (err) => {
         this.loading.set(false);
         // this.errorMessage.set('Unable to load vehicles.');
         this.notificationService.error(err?.error?.message ?? 'Unable to load vehicles.');
-      }
+      },
     });
   }
 
   onVehicleChange(vehicleId: string): void {
+    this.uploadScope.next();
+    this.uploadError.set(null);
     this.selectedVehicleId.set(vehicleId);
 
-    const vehicle = this.vehicles().find(v => v.id === vehicleId);
+    const vehicle = this.vehicles().find((v) => v.id === vehicleId);
     if (vehicle) {
       this.patchMileage(vehicle);
     }
@@ -221,15 +227,17 @@ export class MaintenanceComponent implements OnInit {
     this.errorMessage.set(null);
 
     this.maintenanceService.getVehicleMaintenance(vehicleId).subscribe({
-      next: records => {
+      next: (records) => {
         this.records.set(records);
         this.loadMaintenanceDocuments(records);
         this.loading.set(false);
       },
-      error: err => {
+      error: (err) => {
         this.loading.set(false);
-        this.notificationService.error(err?.error?.message ?? 'Unable to load maintenance records.');
-      }
+        this.notificationService.error(
+          err?.error?.message ?? 'Unable to load maintenance records.',
+        );
+      },
     });
   }
 
@@ -258,26 +266,28 @@ export class MaintenanceComponent implements OnInit {
       mileage: raw.mileage,
       cost: raw.cost,
       vendor: raw.vendor || undefined,
-      nextServiceDate: raw.nextServiceDate || undefined
+      nextServiceDate: raw.nextServiceDate || undefined,
     };
 
     this.maintenanceService.createMaintenance(vehicleId, request).subscribe({
-      next: record => {
-        this.records.update(current => [record, ...current]);
+      next: (record) => {
+        this.records.update((current) => [record, ...current]);
         this.form.patchValue({
           description: '',
           cost: 0,
           vendor: '',
-          nextServiceDate: ''
+          nextServiceDate: '',
         });
         this.saving.set(false);
         this.notificationService.success('Maintenance saved successfully.');
       },
-      error: err => {
+      error: (err) => {
         this.saving.set(false);
         // this.errorMessage.set('Unable to create maintenance record.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to load create maintenance record.');
-      }
+        this.notificationService.error(
+          err?.error?.message ?? 'Unable to load create maintenance record.',
+        );
+      },
     });
   }
 
@@ -290,35 +300,39 @@ export class MaintenanceComponent implements OnInit {
       cost: record.cost,
       vendor: record.vendor || undefined,
       nextServiceDate: record.nextServiceDate || undefined,
-      status
+      status,
     };
 
     this.maintenanceService.updateMaintenance(record.id, request).subscribe({
-      next: updated => {
-        this.records.update(current =>
-          current.map(item => item.id === updated.id ? updated : item)
+      next: (updated) => {
+        this.records.update((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
         );
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to update maintenance status.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to update maintenance status.');
-      }
+        this.notificationService.error(
+          err?.error?.message ?? 'Unable to update maintenance status.',
+        );
+      },
     });
   }
 
   loadMaintenanceDocuments(records: MaintenanceRecord[]): void {
-    records.forEach(record => {
+    records.forEach((record) => {
       this.vehicleDocumentService.getMaintenanceDocuments(record.id).subscribe({
-        next: docs => {
-          this.maintenanceDocuments.update(current => ({
+        next: (docs) => {
+          this.maintenanceDocuments.update((current) => ({
             ...current,
-            [record.id]: docs
+            [record.id]: docs,
           }));
         },
-        error: err => {
+        error: (err) => {
           // console.warn(`Unable to load documents for maintenance ${record.id}`);
-          this.notificationService.error(err?.error?.message ?? `Unable to load documents for maintenance ${record.id}`);
-        }
+          this.notificationService.error(
+            err?.error?.message ?? `Unable to load documents for maintenance ${record.id}`,
+          );
+        },
       });
     });
   }
@@ -330,6 +344,13 @@ export class MaintenanceComponent implements OnInit {
       return;
     }
 
+    if (
+      this.uploadingMaintenanceDocument() ||
+      Date.now() < (this.uploadRetryAt.get(record.id) ?? 0)
+    ) {
+      input.value = '';
+      return;
+    }
     const file = input.files[0];
 
     if (file.size > this.maxUploadSizeBytes) {
@@ -340,34 +361,40 @@ export class MaintenanceComponent implements OnInit {
 
     this.uploadingMaintenanceDocument.set(record.id);
     this.errorMessage.set(null);
+    this.uploadError.set(null);
 
     const selectedType = this.resolveMaintenanceDocumentType(file);
 
-    this.vehicleDocumentService.uploadMaintenanceDocument(
-      record.id,
-      file,
-      selectedType
-    ).subscribe({
-      next: doc => {
-        this.maintenanceDocuments.update(current => ({
-          ...current,
-          [record.id]: [doc, ...(current[record.id] ?? [])]
-        }));
+    this.vehicleDocumentService
+      .uploadMaintenanceDocument(record.id, file, selectedType)
+      .pipe(
+        takeUntil(this.uploadScope),
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => {
+          this.uploadingMaintenanceDocument.set(null);
+          input.value = '';
+        }),
+      )
+      .subscribe({
+        next: (doc) => {
+          this.maintenanceDocuments.update((current) => ({
+            ...current,
+            [record.id]: [doc, ...(current[record.id] ?? [])],
+          }));
 
-        this.uploadingMaintenanceDocument.set(null);
-        input.value = '';
-      },
-      error: err => {
-        this.uploadingMaintenanceDocument.set(null);
-        // this.errorMessage.set('Unable to upload maintenance document.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to upload maintenance document.');
-      }
-    });
+          input.value = '';
+        },
+        error: (err) => {
+          const failure = classifyHttpFailure(err, 'upload');
+          this.uploadRetryAt.set(record.id, Date.now() + (failure.retryAfterMs ?? 0));
+          this.uploadError.set(failureText(failure));
+        },
+      });
   }
 
   downloadDocument(document: VehicleDocument): void {
     this.vehicleDocumentService.downloadDocument(document.id).subscribe({
-      next: response => {
+      next: (response) => {
         const blob = response.body;
 
         if (!blob) {
@@ -384,10 +411,10 @@ export class MaintenanceComponent implements OnInit {
 
         window.URL.revokeObjectURL(url);
       },
-      error: err => {
+      error: (err) => {
         // this.errorMessage.set('Unable to download document.');
         this.notificationService.error(err?.error?.message ?? 'Unable to download document.');
-      }
+      },
     });
   }
 
@@ -398,28 +425,26 @@ export class MaintenanceComponent implements OnInit {
         title: 'Delete Document',
         message: `Are you sure you want to delete "${document.originalFileName}"?`,
         confirmText: 'Delete',
-        cancelText: 'Cancel'
-      }
+        cancelText: 'Cancel',
+      },
     });
 
-    dialogRef.afterClosed().subscribe(confirmed => {
+    dialogRef.afterClosed().subscribe((confirmed) => {
       if (!confirmed) {
         return;
       }
 
       this.vehicleDocumentService.deleteDocument(document.id).subscribe({
         next: () => {
-          this.maintenanceDocuments.update(current => ({
+          this.maintenanceDocuments.update((current) => ({
             ...current,
-            [record.id]: (current[record.id] ?? []).filter(
-              item => item.id !== document.id
-            )
+            [record.id]: (current[record.id] ?? []).filter((item) => item.id !== document.id),
           }));
         },
-        error: err => {
+        error: (err) => {
           // this.errorMessage.set('Unable to delete document.');
           this.notificationService.error(err?.error?.message ?? 'Unable to delete document.');
-        }
+        },
       });
     });
   }
@@ -442,22 +467,21 @@ export class MaintenanceComponent implements OnInit {
 
   private patchMileage(vehicle: Vehicle): void {
     this.form.patchValue({
-      mileage: vehicle.currentMileage ?? 0
+      mileage: vehicle.currentMileage ?? 0,
     });
   }
 
   private resolveMaintenanceDocumentType(file: File): string {
-
     const contentType = file.type.toLowerCase();
     const fileName = file.name.toLowerCase();
 
     if (
-      contentType.startsWith('image/')
-      || fileName.endsWith('.jpg')
-      || fileName.endsWith('.jpeg')
-      || fileName.endsWith('.png')
-      || fileName.endsWith('.webp')
-      || fileName.endsWith('.gif')
+      contentType.startsWith('image/') ||
+      fileName.endsWith('.jpg') ||
+      fileName.endsWith('.jpeg') ||
+      fileName.endsWith('.png') ||
+      fileName.endsWith('.webp') ||
+      fileName.endsWith('.gif')
     ) {
       return 'PHOTO';
     }

@@ -1,8 +1,11 @@
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
+import { classifyHttpFailure, failureText } from '../../../core/http/http-failure';
 import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import {Router, RouterLink} from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -23,13 +26,15 @@ import { AuthService } from '../../../core/auth/auth.service';
     MatInputModule,
     MatButtonModule,
     MatProgressSpinnerModule,
-    RouterLink
+    RouterLink,
   ],
   templateUrl: './login.component.html',
-  styleUrl: './login.component.css'
+  styleUrl: './login.component.css',
 })
 export class LoginComponent {
   readonly pilotPresentation = inject(PILOT_PRESENTATION);
+  private readonly destroyRef = inject(DestroyRef);
+  private retryAt = 0;
   loading = signal(false);
   errorMessage = signal<string | null>(null);
 
@@ -38,15 +43,16 @@ export class LoginComponent {
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
   ) {
     this.form = this.fb.nonNullable.group({
       email: ['demo@fleetwise.com', [Validators.required, Validators.email]],
-      password: ['Password123!', [Validators.required]]
+      password: ['Password123!', [Validators.required]],
     });
   }
 
   login(): void {
+    if (this.loading() || Date.now() < this.retryAt) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -55,15 +61,21 @@ export class LoginComponent {
     this.loading.set(true);
     this.errorMessage.set(null);
 
-    this.authService.login(this.form.getRawValue()).subscribe({
-      next: () => {
-        this.loading.set(false);
-        this.router.navigate([this.pilotPresentation ? '/vehicles' : '/dashboard']);
-      },
-      error: () => {
-        this.loading.set(false);
-        this.errorMessage.set('Invalid email or password.');
-      }
-    });
+    this.authService
+      .login(this.form.getRawValue())
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.loading.set(false)),
+      )
+      .subscribe({
+        next: () => {
+          this.router.navigate([this.pilotPresentation ? '/vehicles' : '/dashboard']);
+        },
+        error: (error: unknown) => {
+          const failure = classifyHttpFailure(error, 'login');
+          this.retryAt = Date.now() + (failure.retryAfterMs ?? 0);
+          this.errorMessage.set(failureText(failure));
+        },
+      });
   }
 }

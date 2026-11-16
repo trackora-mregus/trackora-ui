@@ -1,3 +1,4 @@
+import { classifyHttpFailure, failureText } from '../http/http-failure';
 import { computed, Injectable, OnDestroy, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { finalize, Observable, Subscription } from 'rxjs';
@@ -66,6 +67,7 @@ export class PilotMaintenanceDocuments implements OnDestroy {
   private epoch = 0;
   private destroyed = false;
   private active = new Map<string, Subscription>();
+  private uploadRetryAt = new Map<string, number>();
 
   constructor(
     private api: VehicleDocumentService,
@@ -127,13 +129,27 @@ export class PilotMaintenanceDocuments implements OnDestroy {
     );
   }
 
-  upload(id: string, file: File, success: () => void, failure: (error: unknown) => void): void {
+  upload(
+    id: string,
+    file: File,
+    success: () => void,
+    failure: (error: unknown) => void,
+    done: () => void = () => {},
+  ): void {
     const row = this.rows()[id];
-    if (this.destroyed || !row) return;
+    if (this.destroyed || !row) {
+      done();
+      return;
+    }
+    if (Date.now() < (this.uploadRetryAt.get(id) ?? 0)) {
+      done();
+      return;
+    }
     if (this.active.has(id) || this.uploadingId()) {
       this.patch(id, {
         message: 'A document operation is in progress. Select the file again afterward.',
       });
+      done();
       return;
     }
     this.uploadingId.set(id);
@@ -151,12 +167,15 @@ export class PilotMaintenanceDocuments implements OnDestroy {
       },
       (error) => {
         this.gate.failure(error);
-        this.patch(id, { message: 'Unable to upload maintenance document.' });
+        const classified = classifyHttpFailure(error, 'upload');
+        this.uploadRetryAt.set(id, Date.now() + (classified.retryAfterMs ?? 0));
+        this.patch(id, { message: failureText(classified) });
         failure(error);
       },
       () => {
         this.uploadingId.set(null);
         this.patch(id, { uploading: false });
+        done();
       },
     );
   }

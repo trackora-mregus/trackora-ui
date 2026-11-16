@@ -1,7 +1,7 @@
+import { classifyHttpFailure, failureText } from '../../../core/http/http-failure';
 import { PilotMaintenanceDocuments } from '../../../core/services/pilot-maintenance-documents.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { distinctUntilChanged, map, Observable, Subject, takeUntil } from 'rxjs';
-import { HttpErrorResponse } from '@angular/common/http';
+import { distinctUntilChanged, finalize, map, Observable, Subject, takeUntil } from 'rxjs';
 import { PILOT_PRESENTATION } from '../../../core/config/pilot-presentation';
 import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe, CurrencyPipe } from '@angular/common';
@@ -82,6 +82,8 @@ export class VehicleDetailsComponent implements OnInit {
   private readonly vehicleScope = new Subject<void>();
   loading = signal(false);
   errorMessage = signal<string | null>(null);
+  uploadError = signal<string | null>(null);
+  private uploadRetryAt = new Map<string, number>();
   vehicle = signal<Vehicle | null>(null);
 
   generatingInsight = signal(false);
@@ -544,6 +546,13 @@ export class VehicleDetailsComponent implements OnInit {
       return;
     }
 
+    if (
+      this.uploadingDocument() ||
+      Date.now() < (this.uploadRetryAt.get(`vehicle:${vehicle.id}`) ?? 0)
+    ) {
+      input.value = '';
+      return;
+    }
     const file = input.files[0];
 
     if (file.size > this.maxUploadSizeBytes) {
@@ -562,22 +571,28 @@ export class VehicleDetailsComponent implements OnInit {
 
     this.uploadingDocument.set(true);
     this.errorMessage.set(null);
+    this.uploadError.set(null);
 
     this.vehicleRequest(
       this.vehicleDocumentService.uploadDocument(vehicle.id, file, this.selectedDocumentType()),
-    ).subscribe({
-      next: (document) => {
-        this.documents.update((current) => [document, ...current]);
-        this.uploadingDocument.set(false);
-        input.value = '';
-        this.notificationService.success('Document uploaded successfully.');
-      },
-      error: (err) => {
-        this.uploadingDocument.set(false);
-        // this.errorMessage.set('Unable to upload document.');
-        this.notificationService.error(err?.error?.message ?? 'Unable to upload document.');
-      },
-    });
+    )
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => {
+          this.uploadingDocument.set(false);
+          input.value = '';
+        }),
+      )
+      .subscribe({
+        next: (document) => {
+          this.documents.update((current) => [document, ...current]);
+          input.value = '';
+          this.notificationService.success('Document uploaded successfully.');
+        },
+        error: (err) => {
+          this.showUploadFailure(err, `vehicle:${vehicle.id}`);
+        },
+      });
   }
 
   downloadDocument(document: VehicleDocument): void {
@@ -681,60 +696,64 @@ export class VehicleDetailsComponent implements OnInit {
 
   onMaintenanceDocumentSelected(event: Event, record: MaintenanceRecord): void {
     const input = event.target as HTMLInputElement;
-
-    if (!input.files?.length) {
-      return;
-    }
-
+    if (!input.files?.length) return;
     const file = input.files[0];
-
     if (file.size > this.maxUploadSizeBytes) {
       this.errorMessage.set('File is too large. Maximum upload size is 10 MB.');
       input.value = '';
       return;
     }
-
     if (this.pilotPresentation) {
+      this.uploadError.set(null);
+      this.errorMessage.set(null);
       this.pilotMaintenanceDocuments.upload(
         record.id,
         file,
         () => {
-          input.value = '';
           this.notificationService.success('Maintenance document uploaded.');
         },
-        (error) => {
-          this.notificationService.error(
-            error instanceof HttpErrorResponse
-              ? (error.error?.message ?? 'Unable to upload maintenance document.')
-              : 'Unable to upload maintenance document.',
-          );
+        () => {},
+        () => {
+          input.value = '';
         },
       );
       return;
     }
+    if (
+      this.uploadingMaintenanceDocument() ||
+      Date.now() < (this.uploadRetryAt.get(record.id) ?? 0)
+    ) {
+      input.value = '';
+      return;
+    }
     this.nonpilotUploadingMaintenanceDocument.set(record.id);
-
+    this.uploadError.set(null);
+    this.errorMessage.set(null);
     this.vehicleDocumentService
       .uploadMaintenanceDocument(record.id, file, 'MAINTENANCE_INVOICE')
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => {
+          this.nonpilotUploadingMaintenanceDocument.set(null);
+          input.value = '';
+        }),
+      )
       .subscribe({
         next: (doc) => {
           this.nonpilotMaintenanceDocuments.update((current) => ({
             ...current,
             [record.id]: [doc, ...(current[record.id] ?? [])],
           }));
-
-          this.nonpilotUploadingMaintenanceDocument.set(null);
-          input.value = '';
           this.notificationService.success('Maintenance document uploaded.');
         },
-        error: (err) => {
-          this.nonpilotUploadingMaintenanceDocument.set(null);
-          // this.errorMessage.set('Unable to upload maintenance document.');
-          this.notificationService.error(
-            err?.error?.message ?? 'Unable to upload maintenance document.',
-          );
-        },
+        error: (error: unknown) => this.showUploadFailure(error, record.id),
       });
+  }
+
+  private showUploadFailure(error: unknown, key: string): void {
+    const failure = classifyHttpFailure(error, 'upload');
+    this.uploadRetryAt.set(key, Date.now() + (failure.retryAfterMs ?? 0));
+    this.uploadError.set(failureText(failure));
   }
 
   private vehicleRequest<T>(request: Observable<T>): Observable<T> {
@@ -745,6 +764,7 @@ export class VehicleDetailsComponent implements OnInit {
 
   private resetPilotVehicle(vehicleId: string): void {
     this.vehicleScope.next();
+    this.uploadError.set(null);
     this.pilotMaintenanceDocuments.selectVehicle(vehicleId);
     this.vehicle.set(null);
     this.maintenanceRecords.set([]);
