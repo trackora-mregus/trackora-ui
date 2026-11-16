@@ -1,7 +1,5 @@
 <div class="vehicle-details-page">
-  <button mat-button (click)="backToVehicles()">
-    ← Back to Vehicles
-  </button>
+  <button mat-button (click)="backToVehicles()">&#32;← Back to Vehicles&#32;</button>
 
   @if (loading()) {
     <div class="loading">
@@ -23,53 +21,53 @@
       </div>
 
       <div class="status-actions">
-      <span class="status-pill" [class]="v.status.toLowerCase()">
-        {{ v.status }}
-      </span>
+        <span class="status-pill" [class]="v.status.toLowerCase()">
+          {{ v.status }}
+        </span>
 
-            @if (!pilotPresentation) {
-            <div class="status-buttons">
-              <button
-                mat-stroked-button
-                color="primary"
-                type="button"
-                (click)="updateVehicleStatus('ACTIVE')"
-                [disabled]="updatingStatus() || !canSetStatus('ACTIVE')"
-              >
-                Mark Active
-              </button>
+        @if (!pilotPresentation) {
+          <div class="status-buttons">
+            <button
+              mat-stroked-button
+              color="primary"
+              type="button"
+              (click)="updateVehicleStatus('ACTIVE')"
+              [disabled]="updatingStatus() || !canSetStatus('ACTIVE')"
+            >
+              Mark Active
+            </button>
 
-              <button
-                mat-stroked-button
-                color="primary"
-                type="button"
-                (click)="updateVehicleStatus('IN_SHOP')"
-                [disabled]="updatingStatus() || !canSetStatus('IN_SHOP')"
-              >
-                Mark In Shop
-              </button>
+            <button
+              mat-stroked-button
+              color="primary"
+              type="button"
+              (click)="updateVehicleStatus('IN_SHOP')"
+              [disabled]="updatingStatus() || !canSetStatus('IN_SHOP')"
+            >
+              Mark In Shop
+            </button>
 
-              <button
-                mat-stroked-button
-                color="warn"
-                type="button"
-                (click)="updateVehicleStatus('OUT_OF_SERVICE')"
-                [disabled]="updatingStatus() || !canSetStatus('OUT_OF_SERVICE')"
-              >
-                Out of Service
-              </button>
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              (click)="updateVehicleStatus('OUT_OF_SERVICE')"
+              [disabled]="updatingStatus() || !canSetStatus('OUT_OF_SERVICE')"
+            >
+              Out of Service
+            </button>
 
-              <button
-                mat-stroked-button
-                type="button"
-                (click)="updateVehicleStatus('SOLD')"
-                [disabled]="updatingStatus() || !canSetStatus('SOLD')"
-              >
-                Mark Sold
-              </button>
-            </div>
-            }
+            <button
+              mat-stroked-button
+              type="button"
+              (click)="updateVehicleStatus('SOLD')"
+              [disabled]="updatingStatus() || !canSetStatus('SOLD')"
+            >
+              Mark Sold
+            </button>
           </div>
+        }
+      </div>
     </header>
 
     <section class="cards-grid">
@@ -97,7 +95,7 @@
       <mat-card>
         <mat-card-title>Created</mat-card-title>
         <mat-card-content>
-          <div class="subtext">{{ v.createdAt | date:'medium' }}</div>
+          <div class="subtext">{{ v.createdAt | date: 'medium' }}</div>
         </mat-card-content>
       </mat-card>
     </section>
@@ -145,9 +143,7 @@
               }
             </button>
 
-            <button mat-button type="button" (click)="cancelEditVehicle()">
-              Cancel
-            </button>
+            <button mat-button type="button" (click)="cancelEditVehicle()">&#32;Cancel&#32;</button>
           </div>
         </form>
       } @else {
@@ -189,7 +185,7 @@
                 <ng-container matColumnDef="serviceDate">
                   <th mat-header-cell *matHeaderCellDef>Date</th>
                   <td mat-cell *matCellDef="let record">
-                    {{ record.serviceDate | date:'mediumDate' }}
+                    {{ record.serviceDate | date: 'mediumDate' }}
                   </td>
                 </ng-container>
 
@@ -217,9 +213,9 @@
                 <ng-container matColumnDef="status">
                   <th mat-header-cell *matHeaderCellDef>Status</th>
                   <td mat-cell *matCellDef="let record">
-            <span class="status-pill" [class]="record.status.toLowerCase()">
-              {{ record.status }}
-            </span>
+                    <span class="status-pill" [class]="record.status.toLowerCase()">
+                      {{ record.status }}
+                    </span>
                   </td>
                 </ng-container>
 
@@ -233,19 +229,40 @@
                     <div class="maintenance-documents">
                       @if (pilotPresentation) {
                         @if (pilotMaintenanceDocuments.rows()[record.id]; as row) {
-                          <button mat-stroked-button type="button"
+                          <button
+                            mat-stroked-button
+                            type="button"
                             (click)="pilotMaintenanceDocuments.load(record.id, true)"
                             [disabled]="row.phase === 'loading' || row.uploading"
-                            [attr.aria-label]="'Load documents for maintenance ' + record.id">
-                            {{ row.phase === 'loading' ? 'Loading documents...' : row.phase === 'error' ? 'Retry documents' : row.listed ? 'Refresh documents' : 'Load documents' }}
+                            [attr.aria-label]="'Load documents for maintenance ' + record.id"
+                          >
+                            {{
+                              row.phase === 'loading'
+                                ? 'Loading documents...'
+                                : row.phase === 'error'
+                                  ? 'Retry documents'
+                                  : row.listed
+                                    ? 'Refresh documents'
+                                    : 'Load documents'
+                            }}
                           </button>
                           <span role="status" aria-live="polite">
                             @switch (row.phase) {
-                              @case ('idle') { Documents not loaded. }
-                              @case ('loading') { Loading documents... }
-                              @case ('empty') { No documents found. }
-                              @case ('success') { Documents loaded. }
-                              @case ('error') { Document list unavailable. }
+                              @case ('idle') {
+                                Documents not loaded.
+                              }
+                              @case ('loading') {
+                                Loading documents...
+                              }
+                              @case ('empty') {
+                                No documents found.
+                              }
+                              @case ('success') {
+                                Documents loaded.
+                              }
+                              @case ('error') {
+                                Document list unavailable.
+                              }
                             }
                             {{ row.message }}
                           </span>
@@ -263,7 +280,12 @@
                         color="primary"
                         type="button"
                         (click)="maintenanceDocInput.click()"
-                        [disabled]="pilotPresentation ? uploadingMaintenanceDocument() !== null || pilotMaintenanceDocuments.rows()[record.id]?.phase === 'loading' : uploadingMaintenanceDocument() === record.id"
+                        [disabled]="
+                          pilotPresentation
+                            ? uploadingMaintenanceDocument() !== null ||
+                              pilotMaintenanceDocuments.rows()[record.id]?.phase === 'loading'
+                            : uploadingMaintenanceDocument() === record.id
+                        "
                       >
                         @if (uploadingMaintenanceDocument() === record.id) {
                           Uploading...
@@ -297,213 +319,202 @@
         </mat-tab>
 
         @if (!pilotPresentation) {
-        <mat-tab label="Fuel">
-          <div class="tab-content">
-            @if (fuelLogs().length > 0) {
-              <table mat-table [dataSource]="fuelLogs()" class="details-table">
+          <mat-tab label="Fuel">
+            <div class="tab-content">
+              @if (fuelLogs().length > 0) {
+                <table mat-table [dataSource]="fuelLogs()" class="details-table">
+                  <ng-container matColumnDef="fuelDate">
+                    <th mat-header-cell *matHeaderCellDef>Date</th>
+                    <td mat-cell *matCellDef="let log">
+                      {{ log.fuelDate | date: 'mediumDate' }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="fuelDate">
-                  <th mat-header-cell *matHeaderCellDef>Date</th>
-                  <td mat-cell *matCellDef="let log">
-                    {{ log.fuelDate | date:'mediumDate' }}
-                  </td>
-                </ng-container>
+                  <ng-container matColumnDef="mileage">
+                    <th mat-header-cell *matHeaderCellDef>Mileage</th>
+                    <td mat-cell *matCellDef="let log">
+                      {{ log.mileage | number }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="mileage">
-                  <th mat-header-cell *matHeaderCellDef>Mileage</th>
-                  <td mat-cell *matCellDef="let log">
-                    {{ log.mileage | number }}
-                  </td>
-                </ng-container>
+                  <ng-container matColumnDef="gallons">
+                    <th mat-header-cell *matHeaderCellDef>Gallons</th>
+                    <td mat-cell *matCellDef="let log">
+                      {{ log.gallons | number: '1.1-3' }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="gallons">
-                  <th mat-header-cell *matHeaderCellDef>Gallons</th>
-                  <td mat-cell *matCellDef="let log">
-                    {{ log.gallons | number:'1.1-3' }}
-                  </td>
-                </ng-container>
+                  <ng-container matColumnDef="totalCost">
+                    <th mat-header-cell *matHeaderCellDef>Total Cost</th>
+                    <td mat-cell *matCellDef="let log">
+                      {{ log.totalCost | currency }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="totalCost">
-                  <th mat-header-cell *matHeaderCellDef>Total Cost</th>
-                  <td mat-cell *matCellDef="let log">
-                    {{ log.totalCost | currency }}
-                  </td>
-                </ng-container>
+                  <ng-container matColumnDef="pricePerGallon">
+                    <th mat-header-cell *matHeaderCellDef>Price / Gal</th>
+                    <td mat-cell *matCellDef="let log">
+                      {{ log.pricePerGallon | currency }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="pricePerGallon">
-                  <th mat-header-cell *matHeaderCellDef>Price / Gal</th>
-                  <td mat-cell *matCellDef="let log">
-                    {{ log.pricePerGallon | currency }}
-                  </td>
-                </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="fuelColumns"></tr>
+                  <tr mat-row *matRowDef="let row; columns: fuelColumns"></tr>
+                </table>
+              } @else {
+                <p>No fuel logs found for this vehicle.</p>
+              }
+            </div>
+          </mat-tab>
 
-                <tr mat-header-row *matHeaderRowDef="fuelColumns"></tr>
-                <tr mat-row *matRowDef="let row; columns: fuelColumns"></tr>
-              </table>
-            } @else {
-              <p>No fuel logs found for this vehicle.</p>
-            }
-          </div>
-        </mat-tab>
+          <mat-tab label="Alerts">
+            <div class="tab-content">
+              @if (alerts().length > 0) {
+                <table mat-table [dataSource]="alerts()" class="details-table">
+                  <ng-container matColumnDef="type">
+                    <th mat-header-cell *matHeaderCellDef>Type</th>
+                    <td mat-cell *matCellDef="let alert">
+                      <strong>{{ alert.type }}</strong>
+                    </td>
+                  </ng-container>
 
-        <mat-tab label="Alerts">
-          <div class="tab-content">
-            @if (alerts().length > 0) {
-              <table mat-table [dataSource]="alerts()" class="details-table">
+                  <ng-container matColumnDef="message">
+                    <th mat-header-cell *matHeaderCellDef>Message</th>
+                    <td mat-cell *matCellDef="let alert">
+                      {{ alert.message }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="type">
-                  <th mat-header-cell *matHeaderCellDef>Type</th>
-                  <td mat-cell *matCellDef="let alert">
-                    <strong>{{ alert.type }}</strong>
-                  </td>
-                </ng-container>
+                  <ng-container matColumnDef="createdAt">
+                    <th mat-header-cell *matHeaderCellDef>Created</th>
+                    <td mat-cell *matCellDef="let alert">
+                      {{ alert.createdAt | date: 'medium' }}
+                    </td>
+                  </ng-container>
 
-                <ng-container matColumnDef="message">
-                  <th mat-header-cell *matHeaderCellDef>Message</th>
-                  <td mat-cell *matCellDef="let alert">
-                    {{ alert.message }}
-                  </td>
-                </ng-container>
-
-                <ng-container matColumnDef="createdAt">
-                  <th mat-header-cell *matHeaderCellDef>Created</th>
-                  <td mat-cell *matCellDef="let alert">
-                    {{ alert.createdAt | date:'medium' }}
-                  </td>
-                </ng-container>
-
-                <ng-container matColumnDef="status">
-                  <th mat-header-cell *matHeaderCellDef>Status</th>
-                  <td mat-cell *matCellDef="let alert">
-            <span
-              class="status-pill"
-              [class.resolved]="alert.resolved"
-              [class.open]="!alert.resolved"
-            >
-              {{ alert.resolved ? 'RESOLVED' : 'OPEN' }}
-            </span>
-                  </td>
-                </ng-container>
-
-                <ng-container matColumnDef="actions">
-                  <th mat-header-cell *matHeaderCellDef>Actions</th>
-                  <td mat-cell *matCellDef="let alert">
-                    @if (!alert.resolved) {
-                      <button
-                        mat-stroked-button
-                        color="primary"
-                        (click)="resolveAlert(alert)"
+                  <ng-container matColumnDef="status">
+                    <th mat-header-cell *matHeaderCellDef>Status</th>
+                    <td mat-cell *matCellDef="let alert">
+                      <span
+                        class="status-pill"
+                        [class.resolved]="alert.resolved"
+                        [class.open]="!alert.resolved"
                       >
-                        Resolve
-                      </button>
-                    } @else {
-                      <span class="subtext">No actions</span>
-                    }
-                  </td>
-                </ng-container>
+                        {{ alert.resolved ? 'RESOLVED' : 'OPEN' }}
+                      </span>
+                    </td>
+                  </ng-container>
 
-                <tr mat-header-row *matHeaderRowDef="alertColumns"></tr>
-                <tr mat-row *matRowDef="let row; columns: alertColumns"></tr>
+                  <ng-container matColumnDef="actions">
+                    <th mat-header-cell *matHeaderCellDef>Actions</th>
+                    <td mat-cell *matCellDef="let alert">
+                      @if (!alert.resolved) {
+                        <button mat-stroked-button color="primary" (click)="resolveAlert(alert)">
+                          Resolve
+                        </button>
+                      } @else {
+                        <span class="subtext">No actions</span>
+                      }
+                    </td>
+                  </ng-container>
 
-              </table>
-            } @else {
-              <p>No alerts found for this vehicle.</p>
-            }
-          </div>
-        </mat-tab>
-
+                  <tr mat-header-row *matHeaderRowDef="alertColumns"></tr>
+                  <tr mat-row *matRowDef="let row; columns: alertColumns"></tr>
+                </table>
+              } @else {
+                <p>No alerts found for this vehicle.</p>
+              }
+            </div>
+          </mat-tab>
         }
 
-<!--        <mat-tab label="AI Insights">-->
-<!--          <div class="tab-content">-->
-<!--            <div class="tab-header-row">-->
-<!--              <div>-->
-<!--                <h3>AI Insights</h3>-->
-<!--                <p class="subtext">-->
-<!--                  Generate and review AI summaries for this vehicle.-->
-<!--                </p>-->
-<!--              </div>-->
+        <!--        <mat-tab label="AI Insights">-->
+        <!--          <div class="tab-content">-->
+        <!--            <div class="tab-header-row">-->
+        <!--              <div>-->
+        <!--                <h3>AI Insights</h3>-->
+        <!--                <p class="subtext">-->
+        <!--                  Generate and review AI summaries for this vehicle.-->
+        <!--                </p>-->
+        <!--              </div>-->
 
-<!--              <button-->
-<!--                mat-raised-button-->
-<!--                color="primary"-->
-<!--                type="button"-->
-<!--                (click)="generateAiInsight()"-->
-<!--                [disabled]="generatingInsight()"-->
-<!--              >-->
-<!--                @if (generatingInsight()) {-->
-<!--                  Generating...-->
-<!--                } @else {-->
-<!--                  Generate New Insight-->
-<!--                }-->
-<!--              </button>-->
-<!--            </div>-->
+        <!--              <button-->
+        <!--                mat-raised-button-->
+        <!--                color="primary"-->
+        <!--                type="button"-->
+        <!--                (click)="generateAiInsight()"-->
+        <!--                [disabled]="generatingInsight()"-->
+        <!--              >-->
+        <!--                @if (generatingInsight()) {-->
+        <!--                  Generating...-->
+        <!--                } @else {-->
+        <!--                  Generate New Insight-->
+        <!--                }-->
+        <!--              </button>-->
+        <!--            </div>-->
 
-<!--            <h4>Latest Insight</h4>-->
+        <!--            <h4>Latest Insight</h4>-->
 
-<!--            @if (latestInsight(); as insight) {-->
-<!--              <mat-card class="insight-card">-->
-<!--                <mat-card-subtitle>-->
-<!--                  {{ insight.createdAt | date:'medium' }}-->
-<!--                </mat-card-subtitle>-->
+        <!--            @if (latestInsight(); as insight) {-->
+        <!--              <mat-card class="insight-card">-->
+        <!--                <mat-card-subtitle>-->
+        <!--                  {{ insight.createdAt | date:'medium' }}-->
+        <!--                </mat-card-subtitle>-->
 
-<!--                <mat-card-content>-->
-<!--                  <p>{{ insight.summary }}</p>-->
-<!--                </mat-card-content>-->
-<!--              </mat-card>-->
-<!--            } @else {-->
-<!--              <p>No AI insight found yet.</p>-->
-<!--            }-->
+        <!--                <mat-card-content>-->
+        <!--                  <p>{{ insight.summary }}</p>-->
+        <!--                </mat-card-content>-->
+        <!--              </mat-card>-->
+        <!--            } @else {-->
+        <!--              <p>No AI insight found yet.</p>-->
+        <!--            }-->
 
-<!--            <div class="older-insights-actions">-->
-<!--              <button-->
-<!--                mat-stroked-button-->
-<!--                color="primary"-->
-<!--                type="button"-->
-<!--                (click)="loadOlderInsights()"-->
-<!--                [disabled]="loadingOlderInsights()"-->
-<!--              >-->
-<!--                @if (loadingOlderInsights()) {-->
-<!--                  Loading...-->
-<!--                } @else {-->
-<!--                  Load Older Insights-->
-<!--                }-->
-<!--              </button>-->
-<!--            </div>-->
+        <!--            <div class="older-insights-actions">-->
+        <!--              <button-->
+        <!--                mat-stroked-button-->
+        <!--                color="primary"-->
+        <!--                type="button"-->
+        <!--                (click)="loadOlderInsights()"-->
+        <!--                [disabled]="loadingOlderInsights()"-->
+        <!--              >-->
+        <!--                @if (loadingOlderInsights()) {-->
+        <!--                  Loading...-->
+        <!--                } @else {-->
+        <!--                  Load Older Insights-->
+        <!--                }-->
+        <!--              </button>-->
+        <!--            </div>-->
 
-<!--            @if (showOlderInsights()) {-->
-<!--              <h4>Older Insights</h4>-->
+        <!--            @if (showOlderInsights()) {-->
+        <!--              <h4>Older Insights</h4>-->
 
-<!--              @if (olderInsights().length > 0) {-->
-<!--                <div class="insights-list">-->
-<!--                  @for (insight of olderInsights(); track insight.id) {-->
-<!--                    <mat-card class="insight-card">-->
-<!--                      <mat-card-subtitle>-->
-<!--                        {{ insight.createdAt | date:'medium' }}-->
-<!--                      </mat-card-subtitle>-->
+        <!--              @if (olderInsights().length > 0) {-->
+        <!--                <div class="insights-list">-->
+        <!--                  @for (insight of olderInsights(); track insight.id) {-->
+        <!--                    <mat-card class="insight-card">-->
+        <!--                      <mat-card-subtitle>-->
+        <!--                        {{ insight.createdAt | date:'medium' }}-->
+        <!--                      </mat-card-subtitle>-->
 
-<!--                      <mat-card-content>-->
-<!--                        <p>{{ insight.summary }}</p>-->
-<!--                      </mat-card-content>-->
-<!--                    </mat-card>-->
-<!--                  }-->
-<!--                </div>-->
-<!--              } @else {-->
-<!--                <p>No older insights found.</p>-->
-<!--              }-->
-<!--            }-->
-<!--          </div>-->
-<!--        </mat-tab>-->
+        <!--                      <mat-card-content>-->
+        <!--                        <p>{{ insight.summary }}</p>-->
+        <!--                      </mat-card-content>-->
+        <!--                    </mat-card>-->
+        <!--                  }-->
+        <!--                </div>-->
+        <!--              } @else {-->
+        <!--                <p>No older insights found.</p>-->
+        <!--              }-->
+        <!--            }-->
+        <!--          </div>-->
+        <!--        </mat-tab>-->
 
         <mat-tab label="Documents">
           <div class="tab-content">
-
             <div class="tab-header-row">
               <div>
                 <h3>Vehicle Documents</h3>
-                <p class="subtext">
-                  Upload and manage files for this vehicle.
-                </p>
+                <p class="subtext">&#32;Upload and manage files for this vehicle.&#32;</p>
               </div>
 
               <div class="document-upload-actions">
@@ -521,12 +532,7 @@
                   </mat-select>
                 </mat-form-field>
 
-                <input
-                  #documentInput
-                  type="file"
-                  hidden
-                  (change)="onDocumentSelected($event)"
-                />
+                <input #documentInput type="file" hidden (change)="onDocumentSelected($event)" />
 
                 <button
                   mat-raised-button
@@ -545,13 +551,7 @@
             </div>
 
             @if (documents().length > 0) {
-
-              <table
-                mat-table
-                [dataSource]="documents()"
-                class="mat-elevation-z1 full-width-table"
-              >
-
+              <table mat-table [dataSource]="documents()" class="mat-elevation-z1 full-width-table">
                 <ng-container matColumnDef="fileName">
                   <th mat-header-cell *matHeaderCellDef>File</th>
                   <td mat-cell *matCellDef="let doc">
@@ -576,7 +576,7 @@
                 <ng-container matColumnDef="createdAt">
                   <th mat-header-cell *matHeaderCellDef>Uploaded</th>
                   <td mat-cell *matCellDef="let doc">
-                    {{ doc.createdAt | date:'medium' }}
+                    {{ doc.createdAt | date: 'medium' }}
                   </td>
                 </ng-container>
 
@@ -594,114 +594,99 @@
                     </button>
 
                     @if (!pilotPresentation) {
-                    <button
-                      mat-button
-                      color="warn"
-                      type="button"
-                      (click)="deleteDocument(doc)"
-                    >
-                      Delete
-                    </button>
+                      <button mat-button color="warn" type="button" (click)="deleteDocument(doc)">
+                        Delete
+                      </button>
                     }
                   </td>
                 </ng-container>
 
                 <tr mat-header-row *matHeaderRowDef="documentColumns"></tr>
                 <tr mat-row *matRowDef="let row; columns: documentColumns"></tr>
-
               </table>
-
             } @else {
               <p>No documents uploaded yet.</p>
             }
-
           </div>
         </mat-tab>
 
         <mat-tab [label]="pilotPresentation ? 'Assigned Device' : 'Telematics'">
           <section class="tab-content">
             @if (!pilotPresentation) {
-            <mat-card class="telematics-card">
-              <mat-card-header>
-                <mat-card-title>Live Telematics</mat-card-title>
-                <mat-card-subtitle>
-                  Latest vehicle telemetry snapshot
-                </mat-card-subtitle>
-              </mat-card-header>
+              <mat-card class="telematics-card">
+                <mat-card-header>
+                  <mat-card-title>Live Telematics</mat-card-title>
+                  <mat-card-subtitle> Latest vehicle telemetry snapshot </mat-card-subtitle>
+                </mat-card-header>
 
-              <mat-card-content>
-                @if (latestTelematics(); as telemetry) {
-                  <div class="telematics-grid">
+                <mat-card-content>
+                  @if (latestTelematics(); as telemetry) {
+                    <div class="telematics-grid">
+                      <!--                    <div class="telemetry-stat">-->
+                      <!--                      <span>Speed</span>-->
+                      <!--                      <strong>{{ telemetry.speedMph ?? 0 }} mph</strong>-->
+                      <!--                    </div>-->
 
-<!--                    <div class="telemetry-stat">-->
-<!--                      <span>Speed</span>-->
-<!--                      <strong>{{ telemetry.speedMph ?? 0 }} mph</strong>-->
-<!--                    </div>-->
+                      <div
+                        class="telemetry-stat"
+                        [class.warning]="(telemetry.fuelLevelPercent ?? 100) < 25"
+                        [class.danger]="(telemetry.fuelLevelPercent ?? 100) < 15"
+                      >
+                        <span>Fuel</span>
+                        <strong>{{ telemetry.fuelLevelPercent ?? 0 }}%</strong>
+                      </div>
 
-                    <div
-                      class="telemetry-stat"
-                      [class.warning]="(telemetry.fuelLevelPercent ?? 100) < 25"
-                      [class.danger]="(telemetry.fuelLevelPercent ?? 100) < 15"
-                    >
-                      <span>Fuel</span>
-                      <strong>{{ telemetry.fuelLevelPercent ?? 0 }}%</strong>
+                      <div
+                        class="telemetry-stat"
+                        [class.danger]="(telemetry.engineTempF ?? 0) > 230"
+                      >
+                        <span>Engine Temp</span>
+                        <strong>{{ telemetry.engineTempF ?? 0 }}°F</strong>
+                      </div>
+
+                      <div
+                        class="telemetry-stat"
+                        [class.warning]="(telemetry.batteryVoltage ?? 12.6) < 12"
+                        [class.danger]="(telemetry.batteryVoltage ?? 12.6) < 11.8"
+                      >
+                        <span>Battery</span>
+                        <strong>{{ telemetry.batteryVoltage ?? 0 }}V</strong>
+                      </div>
+
+                      <div class="telemetry-stat">
+                        <span>Odometer</span>
+                        <strong>{{ telemetry.odometerMiles ?? 0 }} mi</strong>
+                      </div>
+
+                      <!--                    <div class="telemetry-stat">-->
+                      <!--                      <span>Idle</span>-->
+                      <!--                      <strong>{{ telemetry.idleMinutes }} min</strong>-->
+                      <!--                    </div>-->
+
+                      <div class="telemetry-stat" [class.danger]="telemetry.checkEngine">
+                        <span>Check Engine</span>
+                        <strong>{{ telemetry.checkEngine ? 'ACTIVE' : 'OK' }}</strong>
+                      </div>
+
+                      <div class="telemetry-stat">
+                        <span>Last Reported</span>
+                        <strong>{{ telemetry.recordedAt | date: 'short' }}</strong>
+                      </div>
                     </div>
+                  } @else {
+                    <p class="subtext">No telematics data reported for this vehicle yet.</p>
+                  }
 
-                    <div
-                      class="telemetry-stat"
-                      [class.danger]="(telemetry.engineTempF ?? 0) > 230"
-                    >
-                      <span>Engine Temp</span>
-                      <strong>{{ telemetry.engineTempF ?? 0 }}°F</strong>
-                    </div>
-
-                    <div
-                      class="telemetry-stat"
-                      [class.warning]="(telemetry.batteryVoltage ?? 12.6) < 12"
-                      [class.danger]="(telemetry.batteryVoltage ?? 12.6) < 11.8"
-                    >
-                      <span>Battery</span>
-                      <strong>{{ telemetry.batteryVoltage ?? 0 }}V</strong>
-                    </div>
-
-                    <div class="telemetry-stat">
-                      <span>Odometer</span>
-                      <strong>{{ telemetry.odometerMiles ?? 0 }} mi</strong>
-                    </div>
-
-<!--                    <div class="telemetry-stat">-->
-<!--                      <span>Idle</span>-->
-<!--                      <strong>{{ telemetry.idleMinutes }} min</strong>-->
-<!--                    </div>-->
-
-                    <div
-                      class="telemetry-stat"
-                      [class.danger]="telemetry.checkEngine"
-                    >
-                      <span>Check Engine</span>
-                      <strong>{{ telemetry.checkEngine ? 'ACTIVE' : 'OK' }}</strong>
-                    </div>
-
-                    <div class="telemetry-stat">
-                      <span>Last Reported</span>
-                      <strong>{{ telemetry.recordedAt | date:'short' }}</strong>
-                    </div>
-                  </div>
-                } @else {
-                  <p class="subtext">No telematics data reported for this vehicle yet.</p>
-                }
-
-<!--                <button-->
-<!--                  mat-stroked-button-->
-<!--                  type="button"-->
-<!--                  class="simulate-button"-->
-<!--                  (click)="simulateTelematicsEvent()"-->
-<!--                >-->
-<!--                  Simulate Event-->
-<!--                </button>-->
-              </mat-card-content>
-            </mat-card>
-
+                  <!--                <button-->
+                  <!--                  mat-stroked-button-->
+                  <!--                  type="button"-->
+                  <!--                  class="simulate-button"-->
+                  <!--                  (click)="simulateTelematicsEvent()"-->
+                  <!--                >-->
+                  <!--                  Simulate Event-->
+                  <!--                </button>-->
+                </mat-card-content>
+              </mat-card>
             }
 
             <mat-card class="device-card">
@@ -711,7 +696,6 @@
 
               <mat-card-content>
                 <div class="device-grid">
-
                   <div class="device-stat">
                     <span>Provider</span>
                     <strong>{{ device()?.provider }}</strong>
@@ -725,10 +709,7 @@
                   <div class="device-stat">
                     <span>Status</span>
 
-                    <strong
-                      class="device-status"
-                      [class]="getDeviceStatusClass()"
-                    >
+                    <strong class="device-status" [class]="getDeviceStatusClass()">
                       {{ getDeviceStatus() }}
                     </strong>
                   </div>
@@ -736,10 +717,9 @@
                   <div class="device-stat">
                     <span>Last Seen</span>
                     <strong>
-                      {{ device()?.lastSeenAt | date:'short' }}
+                      {{ device()?.lastSeenAt | date: 'short' }}
                     </strong>
                   </div>
-
                 </div>
               </mat-card-content>
             </mat-card>
@@ -747,18 +727,18 @@
         </mat-tab>
 
         @if (!pilotPresentation) {
-        <mat-tab label="Map">
-          <ng-template matTabContent>
-            @if (vehicle(); as currentVehicle) {
-              <app-vehicle-map
-                [vehicleId]="currentVehicle.id"
-                [fleetId]="currentVehicle.fleetId"
-                [vehicleName]="currentVehicle.make + ' ' + currentVehicle.model"
-                [licensePlate]="currentVehicle.licensePlate"
-              />
-            }
-          </ng-template>
-        </mat-tab>
+          <mat-tab label="Map">
+            <ng-template matTabContent>
+              @if (vehicle(); as currentVehicle) {
+                <app-vehicle-map
+                  [vehicleId]="currentVehicle.id"
+                  [fleetId]="currentVehicle.fleetId"
+                  [vehicleName]="currentVehicle.make + ' ' + currentVehicle.model"
+                  [licensePlate]="currentVehicle.licensePlate"
+                />
+              }
+            </ng-template>
+          </mat-tab>
         }
       </mat-tab-group>
     </mat-card>
